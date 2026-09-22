@@ -50,33 +50,74 @@ function extractFromPage(p){
 }
 
 export function makePlanningContext(hits=[],direction=null){
-  const relevant=hits.slice(0,8);
-  const extracted=relevant.map(extractFromPage);
-  const diagnoses=relevant
+  const dedup=[...hits].filter(Boolean).filter((p,i,arr)=>
+    arr.findIndex(x=>x.kind===p.kind&&x.page===p.page&&x.meta?.title===p.meta?.title)===i
+  );
+  const relevant=dedup.slice(0,12);
+  const nanda=relevant.filter(p=>p.kind==='NANDA');
+  const enp=relevant.filter(p=>p.kind==='ENP');
+  const ordered=[...nanda,...enp];
+  const extracted=ordered.map(p=>({page:p,data:extractFromPage(p)}));
+
+  const diagnoses=ordered
     .filter(p=>p?.meta?.title)
     .map(p=>({
-      kind:p.kind,page:p.page,code:p.meta?.code||'',title:p.meta.title,
+      kind:p.kind,page:p.page,bookPage:p.bookPage||'',code:p.meta?.code||'',title:p.meta.title,
+      domain:p.meta?.domain||'',className:p.meta?.className||'',area:p.meta?.area||'',
+      relevancePct:p.relevancePct,
       risk:/\bRisiko\b/i.test(p.meta.title)||/\bRisikofaktoren\b/i.test(p.text||'')
     }));
 
-  const riskDiag=diagnoses.find(d=>d.risk)||null;
-  const problemDiag=diagnoses.find(d=>!d.risk)||null;
-  const fallback=diagnoses[0]||{kind:'',page:'',code:'',title:direction?.title||'Pflegediagnose',risk:false};
+  // NANDA is preferred for the formal diagnosis/classification. ENP is preferred
+  // for practical goals/resources/measures. Both remain visible in the sources.
+  const nandaDiagnoses=diagnoses.filter(d=>d.kind==='NANDA');
+  const enpDiagnoses=diagnoses.filter(d=>d.kind==='ENP');
+  const riskDiag=nandaDiagnoses.find(d=>d.risk)||enpDiagnoses.find(d=>d.risk)||diagnoses.find(d=>d.risk)||null;
+  const problemDiag=nandaDiagnoses.find(d=>!d.risk)||enpDiagnoses.find(d=>!d.risk)||diagnoses.find(d=>!d.risk)||null;
+  const fallback=nandaDiagnoses[0]||enpDiagnoses[0]||diagnoses[0]||{kind:'',page:'',code:'',title:direction?.title||'Pflegediagnose',risk:false};
+
+  const nandaData=extracted.filter(x=>x.page.kind==='NANDA').map(x=>x.data);
+  const enpData=extracted.filter(x=>x.page.kind==='ENP').map(x=>x.data);
+  const allData=extracted.map(x=>x.data);
+
+  const prefer=(first,second,key,limit)=>uniq([
+    ...first.flatMap(x=>x[key]||[]),
+    ...second.flatMap(x=>x[key]||[])
+  ]).slice(0,limit);
+
+  const sourceRows=[];
+  const topN=nanda[0],topE=enp[0];
+  if(topN)sourceRows.push(`NANDA ${topN.bookPage?'Buch S. '+topN.bookPage:'PDF S. '+topN.page}${topN.meta?.code?' · '+topN.meta.code:''}`);
+  if(topE)sourceRows.push(`ENP ${topE.bookPage?'Buch S. '+topE.bookPage:'PDF S. '+topE.page}`);
+  for(const p of relevant){
+    const row=`${p.kind} ${p.bookPage?'Buch S. '+p.bookPage:'PDF S. '+p.page}${p.meta?.code?' · '+p.meta.code:''}`;
+    if(!sourceRows.includes(row))sourceRows.push(row);
+  }
 
   return {
     direction,
     diagnoses,
+    nandaDiagnoses,
+    enpDiagnoses,
+    primaryNanda:nandaDiagnoses[0]||null,
+    primaryEnp:enpDiagnoses[0]||null,
     riskDiag,
     problemDiag,
     fallback,
     suggestions:{
-      causes:uniq(extracted.flatMap(x=>x.causes)).slice(0,8),
-      symptoms:uniq(extracted.flatMap(x=>x.symptoms)).slice(0,8),
-      resources:uniq(extracted.flatMap(x=>x.resources)).slice(0,8),
-      goals:uniq(extracted.flatMap(x=>x.goals)).slice(0,6),
-      measures:uniq(extracted.flatMap(x=>x.measures)).slice(0,10)
+      // Formal diagnosis evidence first from NANDA, practical planning first from ENP.
+      causes:prefer(nandaData,enpData,'causes',10),
+      symptoms:prefer(nandaData,enpData,'symptoms',10),
+      resources:prefer(enpData,nandaData,'resources',10),
+      goals:prefer(enpData,nandaData,'goals',8),
+      measures:prefer(enpData,nandaData,'measures',14)
     },
-    sources:relevant.map(p=>`${p.kind} S. ${p.page}${p.meta?.code?' · '+p.meta.code:''}`).slice(0,6)
+    sourceCompleteness:{
+      nanda:Boolean(topN),
+      enp:Boolean(topE),
+      complete:Boolean(topN&&topE)
+    },
+    sources:sourceRows.slice(0,8)
   };
 }
 
