@@ -19,6 +19,7 @@ let knowledgeBase=null;
 let activePatient=null;
 let patientCache=[];
 let reopenModal=null;
+let appMode='books';
 
 const byKind=k=>books.find(b=>b.kind===k);
 const ui=(ru,de)=>bi(ru,de);
@@ -94,9 +95,18 @@ function pdfTextWithLines(content){
 }
 
 
+
+function setAppMode(mode){
+  appMode=mode==='patient'?'patient':'books';
+  $('#bookSearchTab')?.classList.toggle('active',appMode==='books');
+  $('#patientPlanTab')?.classList.toggle('active',appMode==='patient');
+  renderPatientBar();
+  if(hits.length){renderDirection();renderResults()}
+}
+
 function renderPatientBar(){
   const bar=$('#patientBar');
-  if(!activePatient){bar.classList.add('hidden');return}
+  if(appMode!=='patient'||!activePatient){bar.classList.add('hidden');return}
   bar.classList.remove('hidden');
   $('#activePatientAlias').textContent=activePatient.alias||t('noPatient');
   $('#activePatientSituation').textContent=activePatient.situation||'';
@@ -113,7 +123,7 @@ async function refreshPatients(){
 async function activatePatient(id,{autoContinue=false}={}){
   const p=await getPatient(id);
   if(!p)return;
-  activePatient=p;setActivePatientId(id);renderPatientBar();
+  activePatient=p;setActivePatientId(id);setAppMode('patient');renderPatientBar();
   closeModal();
   if(p.situation){
     $('#query').value=p.situation;
@@ -163,6 +173,7 @@ function newPatientModal(existing=activePatient){
     if(!alias){toast(getLang()==='de'?'Bitte Pseudonym eingeben':'Укажи псевдоним');return}
     const saved=await savePatient({...existing,alias,situation});
     activePatient=saved;setActivePatientId(saved.id);await refreshPatients();
+    setAppMode('patient');
     closeModal();
     if(situation){
       $('#query').value=situation;
@@ -240,6 +251,7 @@ function message(role,text){const d=document.createElement('div');d.className='m
 
 function renderDirection(){
   const box=$('#direction');
+  if(appMode==='books'){box.innerHTML='';return}
   if(!hits.length){box.innerHTML='';return}
   const ctx=makePlanningContext(hits,lastDirection);
   const title=lastDirection?.title||ctx.problemDiag?.title||ctx.riskDiag?.title||'Найденное направление';
@@ -259,6 +271,7 @@ async function search(q){
   renderDirection();renderResults();
   const ms=Math.max(1,Math.round(performance.now()-t0));
   if(!hits.length)message('bot',ui('Подходящих информационных страниц не найдено. Содержание и указатели не учитываются.','Keine passenden Informationsseiten gefunden. Inhalts- und Stichwortverzeichnisse werden ausgeschlossen.'));
+  else if(appMode==='books')message('bot',getLang()==='de'?`Gefunden: ${hits.length} Buchseiten in ${ms} ms. Öffne eine Seite für Original und Übersetzung.`:`Нашёл ${hits.length} страниц книги за ${ms} мс. Нажми «Открыть страницу» для оригинала и перевода.`);
   else message('bot',getLang()==='de'?`Gefunden: ${hits.length} relevante Seiten lokal in ${ms} ms. Pflegeplan-Assistent ist oben verfügbar.`:`Нашёл ${hits.length} релевантных страниц локально за ${ms} мс. Выше доступен Pflegeplan-Assistent.`);
 }
 
@@ -266,7 +279,12 @@ $('#searchForm').onsubmit=e=>{e.preventDefault();const q=$('#query').value.trim(
 
 function renderResults(){
   const r=$('#results');
-  r.innerHTML=hits.map((h,i)=>`<article class="result"><div class="resultHead"><div class="rank">${i+1}</div><div><div class="tags"><span class="tag ${h.kind.toLowerCase()}">${h.kind}</span><span class="tag">стр. ${h.page}</span>${h.meta?.code?`<span class="tag">${esc(h.meta.code)}</span>`:''}</div><h3>${esc(h.meta?.title||'Информационная страница')}</h3><div class="meta">${esc([h.meta?.domain,h.meta?.className].filter(Boolean).join(' · '))}</div></div></div><div class="resultBtns"><button class="openBtn" data-open="${i}">${ui('Оригинал + перевод','Original + Übersetzung')}</button><button class="planBtn" data-plan="${i}">${ui('Pflegeplan по вариантам','Pflegeplan auswählen')}</button></div></article>`).join('');
+  r.innerHTML=hits.map((h,i)=>{
+    const planButton=appMode==='patient'
+      ? `<button class="planBtn" data-plan="${i}">${ui('Pflegeplan по вариантам','Pflegeplan auswählen')}</button>`
+      : '';
+    return `<article class="result"><div class="resultHead"><div class="rank">${i+1}</div><div><div class="tags"><span class="tag ${h.kind.toLowerCase()}">${h.kind}</span><span class="tag">${ui('стр.','S.')} ${h.page}</span>${h.meta?.code?`<span class="tag">${esc(h.meta.code)}</span>`:''}</div><h3>${esc(h.meta?.title||ui('Информационная страница','Informationsseite'))}</h3><div class="meta">${esc([h.meta?.domain,h.meta?.className].filter(Boolean).join(' · '))}</div></div></div><div class="resultBtns"><button class="openBtn" data-open="${i}">${ui('Открыть страницу','Seite öffnen')}</button>${planButton}</div></article>`;
+  }).join('');
   r.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openPage(hits[+b.dataset.open]));
   r.querySelectorAll('[data-plan]').forEach(b=>b.onclick=()=>{const h=hits[+b.dataset.plan];openWizard([h,...hits.filter(x=>x!==h)],lastDirection,h)});
 }
@@ -669,16 +687,18 @@ $('#installBtn').onclick=()=>{
     :'<h2>Установка на iPhone</h2><ol><li>Открой этот сайт именно в Safari.</li><li>Нажми «Поделиться».</li><li>Выбери «На экран Домой».</li><li>Подтверди добавление PflegeBuch.</li></ol><p class="note">После установки приложение открывается отдельно. PDF и индекс хранятся локально на устройстве.</p>');
 };
 
-$('#patientsBtn').onclick=async()=>{await refreshPatients();patientListModal()};
-$('#headerPatientsBtn').onclick=async()=>{await refreshPatients();patientListModal()};
-$('#backPatientsBtn').onclick=async()=>{await refreshPatients();patientListModal()};
-$('#newPatientBtn').onclick=()=>newPatientModal(null);
-$('#headerNewPatientBtn').onclick=()=>newPatientModal(null);
+$('#patientsBtn').onclick=async()=>{setAppMode('patient');await refreshPatients();patientListModal()};
+$('#headerPatientsBtn').onclick=async()=>{setAppMode('patient');await refreshPatients();patientListModal()};
+$('#backPatientsBtn').onclick=async()=>{setAppMode('patient');await refreshPatients();patientListModal()};
+$('#newPatientBtn').onclick=()=>{setAppMode('patient');newPatientModal(null)};
+$('#headerNewPatientBtn').onclick=()=>{setAppMode('patient');newPatientModal(null)};
+$('#bookSearchTab').onclick=()=>setAppMode('books');
+$('#patientPlanTab').onclick=async()=>{setAppMode('patient');await refreshPatients();if(!activePatient){if(patientCache.length)patientListModal();else newPatientModal(null)}};
 $('#editPatientBtn').onclick=()=>newPatientModal(activePatient);
 $('#langBtn').onclick=toggleInterfaceLanguage;
 $('#modalLangBtn').onclick=toggleInterfaceLanguage;
 
 applyStaticI18n();
 refreshLanguage();
-Promise.all([loadBooks(),refreshPatients()]).then(()=>{refreshLanguage()});
+Promise.all([loadBooks(),refreshPatients()]).then(()=>{setAppMode('books');refreshLanguage()});
 if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
