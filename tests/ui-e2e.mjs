@@ -18,22 +18,22 @@ try{
   assert.ok(await page.locator('#bookSearchTab').count(),'book search tab missing');
   await page.fill('#query','плохо ходит');
   await page.click('#sendBtn');
-  await page.waitForSelector('.result');
-  assert.ok(await page.locator('.result [data-open]').count()>0,'book page open button missing');
-  assert.equal(await page.locator('.result [data-plan]').count(),0,'planning button must stay hidden in pure book search mode');
-  const resultText=await page.locator('#results').innerText();
+  await page.waitForSelector('.bookEvidenceTurn .result');
+  assert.ok(await page.locator('.bookEvidenceTurn .result [data-open]').count()>0,'book page open button missing');
+  assert.equal(await page.locator('.bookEvidenceTurn .result [data-plan]').count(),0,'planning button must stay hidden in pure book search mode');
+  const resultText=await page.locator('.bookEvidenceTurn').last().innerText();
   assert.match(resultText,/Domäne|ДОМЕНА/i,'NANDA domain missing from book search');
   assert.match(resultText,/Klasse|КЛАСС/i,'NANDA class missing from book search');
   assert.match(resultText,/Diagnosencode/i,'NANDA diagnosis code missing from book search');
   assert.match(resultText,/Pflegediagnose/i,'diagnosis title context missing from book search');
   assert.match(resultText,/Treffer in|Найдено в разделе/i,'matching section missing from book search');
-  const groups=page.locator('.sourceResultGroup');
+  const groups=page.locator('.bookEvidenceTurn').last().locator('.sourceResultGroup');
   assert.ok(await groups.count()>=2,'both NANDA and ENP result groups must be visible');
-  const headers=await page.locator('.sourceGroupHeader').allTextContents();
+  const headers=await page.locator('.bookEvidenceTurn').last().locator('.sourceGroupHeader').allTextContents();
   assert.ok(headers.some(x=>/NANDA/.test(x)),'NANDA group missing');
   assert.ok(headers.some(x=>/ENP/.test(x)),'ENP group missing');
-  const nandaGroup=page.locator('.sourceResultGroup').filter({hasText:'NANDA'}).first();
-  const enpGroup=page.locator('.sourceResultGroup').filter({hasText:'ENP'}).first();
+  const nandaGroup=page.locator('.bookEvidenceTurn').last().locator('.sourceResultGroup').filter({hasText:'NANDA'}).first();
+  const enpGroup=page.locator('.bookEvidenceTurn').last().locator('.sourceResultGroup').filter({hasText:'ENP'}).first();
   assert.match(await nandaGroup.locator('.relevanceTag').first().innerText(),/Лучшее|Beste/,'best NANDA result not marked');
   assert.match(await enpGroup.locator('.relevanceTag').first().innerText(),/Лучшее|Beste/,'best ENP result not marked');
   const nandaPct=Number(((await nandaGroup.locator('.relevanceTag').first().innerText()).match(/(\d{1,3})%/)||[])[1]);
@@ -51,17 +51,26 @@ try{
   assert.match(pageMeta,/Klasse|КЛАСС/i);
   await page.click('#modalClose');
 
-  // live SMART dialogue for the concrete "Sturzrisiko" case
-  await page.fill('#query','риск падения');
+  // Explicit SMART request must behave like one continuous chat:
+  // answer -> book evidence -> immediate SMART draft -> follow-up question.
+  await page.fill('#query','нужен смарт по риску падения');
   await page.click('#sendBtn');
-  await page.waitForSelector('.result');
-  const fallRiskCard=page.locator('.result').filter({hasText:'00303'}).first();
-  assert.ok(await fallRiskCard.count(),'expected NANDA Sturzrisiko 00303 result missing');
-  await fallRiskCard.locator('[data-dialogue]').click();
-  await page.waitForSelector('.dialogueMsg');
+  await page.waitForSelector('.smartDraftTurn');
+  await page.waitForSelector('.dialogueMsg.bot');
+  const fallEvidence=page.locator('.bookEvidenceTurn').last();
+  assert.ok(await fallEvidence.locator('.result').filter({hasText:'00303'}).count(),'expected NANDA Sturzrisiko 00303 result missing');
+  assert.ok(await fallEvidence.locator('.sourceResultGroup').filter({hasText:'ENP'}).count(),'ENP evidence missing from SMART request');
+  const order=await page.evaluate(()=>{
+    const ev=[...document.querySelectorAll('#messages>*')];
+    const book=ev.findIndex(x=>x.classList.contains('bookEvidenceTurn')&&/00303/.test(x.innerText));
+    const smart=ev.findIndex(x=>x.classList.contains('smartDraftTurn'));
+    const question=ev.findIndex((x,i)=>i>smart&&x.classList.contains('dialogueMsg')&&x.classList.contains('bot'));
+    return {book,smart,question};
+  });
+  assert.ok(order.book>=0&&order.smart>order.book&&order.question>order.smart,'chat timeline order should be books -> SMART draft -> question');
 
-  // choice questions must use buttons only; the sticky text composer must not cover them
-  assert.equal(await page.locator('#searchForm').isVisible(),false,'text composer must be hidden for choice questions');
+  // Composer stays visible like a normal chat; quick buttons are optional helpers.
+  assert.equal(await page.locator('#searchForm').isVisible(),true,'chat composer must stay visible during SMART dialogue');
   assert.ok(await page.locator('.quickAnswers button').count()>0,'quick answer buttons missing');
   const firstQuestionText=await page.locator('.dialogueMsg.bot').last().innerText();
   assert.doesNotMatch(firstQuestionText,/�|Ã.|Â.|â€|â€“|â€”/,'garbled characters in dialogue question');
@@ -83,7 +92,7 @@ try{
       continue;
     }
     const qid=await page.locator('#query').getAttribute('data-dialogue-question');
-    assert.equal(await page.locator('#searchForm').isVisible(),true,'text composer must be visible for free-text questions');
+    assert.equal(await page.locator('#searchForm').isVisible(),true,'chat composer must remain visible');
     const currentQuestionText=await page.locator('.dialogueMsg.bot').last().innerText();
     assert.doesNotMatch(currentQuestionText,/�|Ã.|Â.|â€|â€“|â€”/,'garbled characters in free-text dialogue question');
     let answer='Testangabe';
@@ -107,8 +116,8 @@ try{
 
   await page.fill('#query','Риск раздражений кожи');
   await page.click('#sendBtn');
-  await page.waitForSelector('.result');
-  const skinSearch=await page.locator('#results').innerText();
+  await page.waitForSelector('.bookEvidenceTurn .result');
+  const skinSearch=await page.locator('.bookEvidenceTurn').last().innerText();
   assert.match(skinSearch,/Haut|Hautintegrität/i,'semantic skin-risk search failed');
   assert.match(skinSearch,/Risiko/i,'risk diagnosis should be surfaced for skin-risk query');
 
