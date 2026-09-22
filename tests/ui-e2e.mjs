@@ -59,6 +59,12 @@ try{
   assert.ok(await fallRiskCard.count(),'expected NANDA Sturzrisiko 00303 result missing');
   await fallRiskCard.locator('[data-dialogue]').click();
   await page.waitForSelector('.dialogueMsg');
+
+  // choice questions must use buttons only; the sticky text composer must not cover them
+  assert.equal(await page.locator('#searchForm').isVisible(),false,'text composer must be hidden for choice questions');
+  assert.ok(await page.locator('.quickAnswers button').count()>0,'quick answer buttons missing');
+  const firstQuestionText=await page.locator('.dialogueMsg.bot').last().innerText();
+  assert.doesNotMatch(firstQuestionText,/�|Ã.|Â.|â€|â€“|â€”/,'garbled characters in dialogue question');
   for(let i=0;i<40;i++){
     if(await page.locator('.dialoguePlanCard').count())break;
     if(await page.locator('.multiAnswers').count()){
@@ -77,6 +83,9 @@ try{
       continue;
     }
     const qid=await page.locator('#query').getAttribute('data-dialogue-question');
+    assert.equal(await page.locator('#searchForm').isVisible(),true,'text composer must be visible for free-text questions');
+    const currentQuestionText=await page.locator('.dialogueMsg.bot').last().innerText();
+    assert.doesNotMatch(currentQuestionText,/�|Ã.|Â.|â€|â€“|â€”/,'garbled characters in free-text dialogue question');
     let answer='Testangabe';
     if(qid==='period')answer='7 Tage';
     else if(qid==='goal')answer='geht 10 Meter mit Rollator und Begleitung ohne Gleichgewichtsverlust';
@@ -88,6 +97,7 @@ try{
   }
   await page.waitForSelector('.dialoguePlanCard',{timeout:15000});
   const chatPlan=await page.locator('.dialoguePlanCard').innerText();
+  assert.doesNotMatch(chatPlan,/�|Ã.|Â.|â€|â€“|â€”/,'garbled characters in final dialogue plan');
   assert.match(chatPlan,/SMART/i,'SMART missing from conversational plan');
   assert.match(chatPlan,/NANDA/i,'NANDA source missing from conversational plan');
   assert.match(chatPlan,/ENP/i,'ENP source missing from conversational plan');
