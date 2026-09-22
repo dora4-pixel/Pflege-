@@ -60,12 +60,13 @@ async function loadBooks(){
 
 function refreshEngine(){
   try{
+    for(let i=0;i<books.length;i++)books[i]=enrichBookIndex(books[i]);
     engine=books.length?createSearchEngine(books):null;
     knowledgeBase=books.length?buildKnowledgeBase(books):null;
     $('#status').textContent=books.length
-      ? books.map(b=>b.kind).join(' + ')+' · '+(knowledgeBase?.count||0)+' диагнозов'
-      : 'Нет книг';
-  }catch(e){engine=null;knowledgeBase=null;$('#status').textContent='Ошибка индекса';console.error(e)}
+      ? books.map(b=>b.kind).join(' + ')+' · '+(knowledgeBase?.count||0)+' '+t('diagnoses')
+      : t('noBooks');
+  }catch(e){engine=null;knowledgeBase=null;$('#status').textContent=ui('Ошибка индекса','Indexfehler');console.error(e)}
 }
 
 function renderBooks(){
