@@ -4,7 +4,7 @@ import { makePlanningContext, buildPlan, planToText, renderSuggestions } from '.
 import { buildKnowledgeBase, buildWizardModel, optionsForDiagnosis, frameworkInfo } from './knowledgeBase.js';
 import { listPatients, getPatient, savePatient, deletePatient, getActivePatientId, setActivePatientId } from './patientStore.js';
 import { getLang, toggleLang, t, bi, applyStaticI18n } from './i18n.js';
-import { translateDeRu } from './translator.js';
+import { translateDeRu, translateRuDe } from './translator.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs';
 
@@ -13,6 +13,8 @@ const books=[];
 let hits=[];
 let engine=null;
 let lastDirection=null;
+let lastInference=[];
+let lastFallbackTranslation='';
 let lastQuery='';
 let currentPlan=null;
 let knowledgeBase=null;
@@ -263,16 +265,48 @@ function renderDirection(){
 async function search(q){
   if(!books.length){toast(t('chooseBooks'));return}
   if(!engine)refreshEngine();
-  if(!engine){toast('Не удалось создать индекс');return}
-  lastQuery=q;message('user',q);$('#welcome').classList.add('hidden');
+  if(!engine){toast(ui('Не удалось создать индекс','Index konnte nicht erstellt werden'));return}
+  lastQuery=q;lastFallbackTranslation='';message('user',q);$('#welcome').classList.add('hidden');
   const t0=performance.now();
-  const found=engine.search(q,8);
-  hits=found.hits;lastDirection=found.direction;
+
+  let found=engine.search(q,10);
+  if(!found.hits.length && /[а-яё]/i.test(q)){
+    const translated=await translateRuDe(q);
+    if(translated){
+      lastFallbackTranslation=translated;
+      found=engine.search(q+' '+translated,10);
+    }
+  }
+
+  hits=found.hits;
+  lastDirection=found.direction;
+  lastInference=(found.concepts||[]).map(x=>x.label);
   renderDirection();renderResults();
+
   const ms=Math.max(1,Math.round(performance.now()-t0));
-  if(!hits.length)message('bot',ui('Подходящих информационных страниц не найдено. Содержание и указатели не учитываются.','Keine passenden Informationsseiten gefunden. Inhalts- und Stichwortverzeichnisse werden ausgeschlossen.'));
-  else if(appMode==='books')message('bot',getLang()==='de'?`Gefunden: ${hits.length} Buchseiten in ${ms} ms. Öffne eine Seite für Original und Übersetzung.`:`Нашёл ${hits.length} страниц книги за ${ms} мс. Нажми «Открыть страницу» для оригинала и перевода.`);
-  else message('bot',getLang()==='de'?`Gefunden: ${hits.length} relevante Seiten lokal in ${ms} ms. Pflegeplan-Assistent ist oben verfügbar.`:`Нашёл ${hits.length} релевантных страниц локально за ${ms} мс. Выше доступен Pflegeplan-Assistent.`);
+  const inferred=lastInference.length
+    ? (getLang()==='de'?'Erkannt: ':'Распознано: ')+lastInference.join(' · ')+(found.riskIntent?' · '+ui('риск','Risiko'):'')
+    : '';
+  const fallback=lastFallbackTranslation
+    ? (getLang()==='de'?'Zusätzliche Übersetzung für die Suche: ':'Дополнительный перевод для поиска: ')+lastFallbackTranslation
+    : '';
+
+  if(!hits.length){
+    message('bot',[
+      ui('Подходящих диагнозов/информационных страниц в загруженных NANDA/ENP не найдено. Я искал не только точные слова, но и связанные понятия.','Keine passenden Diagnosen/Informationsseiten in den geladenen NANDA/ENP gefunden. Es wurden auch semantisch verwandte Begriffe geprüft.'),
+      inferred,fallback
+    ].filter(Boolean).join('\n'));
+  }else if(appMode==='books'){
+    message('bot',[
+      getLang()==='de'?`Gefunden: ${hits.length} passende Pflegediagnosen in ${ms} ms. Die Karten zeigen Klassifikation, Trefferbereich und Buchseite.`:`Нашёл ${hits.length} подходящих Pflegediagnosen за ${ms} мс. Карточки показывают классификацию, раздел совпадения и страницу книги.`,
+      inferred,fallback
+    ].filter(Boolean).join('\n'));
+  }else{
+    message('bot',[
+      getLang()==='de'?`Gefunden: ${hits.length} passende Pflegediagnosen. Der Pflegeplan-Assistent nutzt diese als Auswahlbasis.`:`Нашёл ${hits.length} подходящих Pflegediagnosen. Pflegeplan-Assistent использует их как варианты для выбора.`,
+      inferred,fallback
+    ].filter(Boolean).join('\n'));
+  }
 }
 
 $('#searchForm').onsubmit=e=>{e.preventDefault();const q=$('#query').value.trim();if(!q)return;$('#query').value='';search(q)};
