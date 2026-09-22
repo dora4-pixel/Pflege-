@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { buildKnowledgeBase, buildWizardModel } from '../knowledgeBase.js';
-import { enrichBookIndex } from '../searchEngine.js';
+import { enrichBookIndex, calculateRelevancePercent, relevanceLabel } from '../searchEngine.js';
 import { buildPlan, makePlanningContext, planToText } from '../planEngine.js';
 import { inferSemanticQuery } from '../semanticEngine.js';
 
@@ -26,6 +26,9 @@ const skinSemantic=inferSemanticQuery('Риск раздражений кожи'
 assert.equal(skinSemantic.riskIntent,true,'risk intent should be detected');
 assert.ok(skinSemantic.concepts.some(x=>x.id==='skin-integrity'),'skin concept should be inferred');
 assert.ok(skinSemantic.terms.includes('hautintegrität'),'German skin-integrity term should be expanded');
+const rel=calculateRelevancePercent({page:{meta:{title:'Risiko einer beeinträchtigten Hautintegrität',area:'Haut / Wunde'},text:'Risikofaktoren Hautreizung Rötung'},terms:['hautintegrität','hautreizung','risiko'],concepts:skinSemantic.concepts,riskIntent:true,rawScore:10,maxRawScore:10,matchSections:['Risikofaktoren']});
+assert.ok(rel>=80,'relevance score should be high for aligned skin risk');
+assert.ok(/hoch|соответствие/i.test(relevanceLabel(rel)),'relevance label should describe high match');
 const model=buildWizardModel(kb,enrichedBooks.flatMap(b=>b.index.pages),{id:'mobility-fall',title:'Mobilität / Sturzrisiko',terms:['gehen','sturz','mobilität']},'боится встать и плохо ходит');
 assert.ok(model.diagnoses.length>0,'wizard should offer diagnoses');
 assert.ok(model.symptoms.length>0,'wizard should offer symptoms');
