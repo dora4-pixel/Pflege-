@@ -566,7 +566,7 @@ function renderRiskPlans(model,person,period){
 }
 
 function wizardPlanHtml(plan,riskHtml){
-  return '<div class="finalBundle"><div class="frameworkBanner"><b>PÄS(R) + SMART-DE</b><span>Problem/Ätiologie/Symptome/Ressourcen → Ziel → Maßnahmen → Evaluation</span></div>'+
+  return '<div class="finalBundle"><div class="frameworkBanner"><b>PESR / PÄS(R) + SMART</b><span>Problem/Ätiologie/Symptome/Ressourcen → Ziel → Maßnahmen → Evaluation</span></div>'+
     renderStructuredPlan(plan)+riskHtml+'</div>';
 }
 
