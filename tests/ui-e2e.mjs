@@ -27,12 +27,20 @@ try{
   assert.match(resultText,/Diagnosencode/i,'NANDA diagnosis code missing from book search');
   assert.match(resultText,/Pflegediagnose/i,'diagnosis title context missing from book search');
   assert.match(resultText,/Treffer in|Найдено в разделе/i,'matching section missing from book search');
-  const pctTexts=await page.locator('.relevanceTag').allTextContents();
-  assert.ok(pctTexts.length>0,'relevance percentages missing');
-  const pcts=pctTexts.map(x=>Number((x.match(/(\d{1,3})%/)||[])[1])).filter(Number.isFinite);
-  assert.ok(pcts.length>0,'relevance percent values missing');
-  for(let i=1;i<pcts.length;i++)assert.ok(pcts[i-1]>=pcts[i],'results must be sorted by relevance percent');
-  assert.match(pctTexts[0],/Лучшее|Beste/,'top result should be marked best');
+  const groups=page.locator('.sourceResultGroup');
+  assert.ok(await groups.count()>=2,'both NANDA and ENP result groups must be visible');
+  const headers=await page.locator('.sourceGroupHeader').allTextContents();
+  assert.ok(headers.some(x=>/NANDA/.test(x)),'NANDA group missing');
+  assert.ok(headers.some(x=>/ENP/.test(x)),'ENP group missing');
+  const nandaGroup=page.locator('.sourceResultGroup').filter({hasText:'NANDA'}).first();
+  const enpGroup=page.locator('.sourceResultGroup').filter({hasText:'ENP'}).first();
+  assert.match(await nandaGroup.locator('.relevanceTag').first().innerText(),/Лучшее|Beste/,'best NANDA result not marked');
+  assert.match(await enpGroup.locator('.relevanceTag').first().innerText(),/Лучшее|Beste/,'best ENP result not marked');
+  const nandaPct=Number(((await nandaGroup.locator('.relevanceTag').first().innerText()).match(/(\d{1,3})%/)||[])[1]);
+  const enpPct=Number(((await enpGroup.locator('.relevanceTag').first().innerText()).match(/(\d{1,3})%/)||[])[1]);
+  assert.ok(Number.isFinite(nandaPct)&&Number.isFinite(enpPct),'source relevance percentages missing');
+  assert.ok(nandaPct>=80,'best NANDA mobility match should be high relevance');
+  assert.ok(enpPct>=80,'best ENP mobility match should be high relevance');
 
   const nandaCard=page.locator('.result').filter({hasText:'00365'}).first();
   assert.ok(await nandaCard.count(),'expected NANDA 00365 result missing');
@@ -92,6 +100,8 @@ try{
   assert.match(output,/SMART/i);
   assert.match(output,/10 Meter/);
   assert.match(output,/PFLEGE.*NAHMEN/i);
+  assert.match(output,/NANDA/i,'final plan should cite NANDA');
+  assert.match(output,/ENP/i,'final plan should cite ENP');
 
   await page.click('#modalLangBtn');
   await page.waitForSelector('#wizardBuild');
