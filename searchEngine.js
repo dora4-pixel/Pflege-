@@ -1,3 +1,4 @@
+import { inferSemanticQuery } from './semanticEngine.js';
 const MiniSearchCtor=()=>typeof window!=='undefined'?window.MiniSearch:null;
 
 export function normalize(value=''){
@@ -236,11 +237,17 @@ const DIRECTIONS=[
 ];
 
 export function expandQuery(query=''){
-  const set=new Set(String(query).split(/[^\p{L}\p{N}]+/u).filter(x=>x.length>1));
+  const semantic=inferSemanticQuery(query);
+  const set=new Set(semantic.terms);
   for(const [re,terms] of STEMS)if(re.test(query))terms.forEach(t=>set.add(t));
   const direction=DIRECTIONS.find(d=>d.test(query))||null;
   direction?.terms.forEach(t=>set.add(t));
-  return {terms:[...set],direction};
+  return {
+    terms:[...set],
+    direction,
+    riskIntent:semantic.riskIntent,
+    concepts:semantic.concepts
+  };
 }
 
 export function createSearchEngine(books=[]){
@@ -279,7 +286,7 @@ export function createSearchEngine(books=[]){
   return {
     count:docs.length,
     search(query,limit=10){
-      const {terms,direction}=expandQuery(query);
+      const {terms,direction,riskIntent,concepts}=expandQuery(query);
       const phrase=terms.join(' ');
       const raw=mini.search(phrase,{combineWith:'OR',prefix:true,fuzzy:0.16,boost:{title:7,area:3,domain:2,className:2,text:1}}).slice(0,80);
       const pages=raw.map(r=>{
@@ -289,6 +296,13 @@ export function createSearchEngine(books=[]){
         let bonus=0;
         const hay=normalize([p.meta?.title,p.meta?.area,p.meta?.domain,p.meta?.className,p.text?.slice(0,2200)].filter(Boolean).join(' '));
         if(direction)for(const t of direction.terms)if(hay.includes(normalize(t)))bonus+=1.1;
+        if(riskIntent){
+          if(/\bRisiko\b/i.test(p.meta?.title||''))bonus+=8;
+          if(/\bRisikofaktoren\b/i.test(p.text||''))bonus+=2;
+        }
+        for(const concept of concepts||[]){
+          if((concept.terms||[]).some(t=>hay.includes(normalize(t))))bonus+=1.4;
+        }
         if(matchSections.some(x=>/Titel|Bestimmende|Kennzeichen|Beeinflussende|Ursachen|Risikofaktoren/.test(x)))bonus+=4;
         if(matchSections.some(x=>/Pflegemaßnahmen|Pflegeziele/.test(x)))bonus+=1;
         return {...p,searchScore:r.score+bonus,matchSections};
@@ -317,7 +331,7 @@ export function createSearchEngine(books=[]){
         };
       }).sort((a,b)=>b.searchScore-a.searchScore).slice(0,limit);
 
-      return {hits:result,direction,terms};
+      return {hits:result,direction,terms,riskIntent,concepts};
     }
   };
 }
