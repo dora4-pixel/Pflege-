@@ -262,6 +262,7 @@ function resetComposer(){
   const q=$('#query');
   const send=$('#sendBtn');
   q.placeholder=t('queryPlaceholder');
+  delete q.dataset.dialogueQuestion;
   send.textContent=t('search');
 }
 
@@ -324,6 +325,7 @@ function askDialogueQuestion(){
   const text=getLang()==='de'?(q.de||q.ru):(q.ru||q.de);
   const sub=q.note||'';
   dialogueBot(text,sub);
+  $('#query').dataset.dialogueQuestion=q.id||'';
   renderDialogueControls(q);
   dialogueComposer();
 }
@@ -335,10 +337,31 @@ function cancelCareDialogue(){
   dialogueBot(ui('SMART-диалог остановлен. Можно начать новый поиск.','SMART-Dialog beendet. Eine neue Suche kann gestartet werden.'));
 }
 
+function validateDialogueAnswer(question,raw){
+  if(Array.isArray(raw))return '';
+  const v=String(raw||'').trim();
+  if(question.id==='period'){
+    const ok=/\b\d+\s*(tag|tage|woche|wochen|monat|monate|дн|день|дня|дней|недел|месяц)|\b(bis|am)\b|\d{1,2}[.\/-]\d{1,2}(?:[.\/-]\d{2,4})?/i.test(v);
+    if(!ok)return ui('Нужен конкретный срок: например «7 дней» или «до 29.09.2026».','Bitte einen konkreten Zeitraum angeben, z. B. „7 Tage“ oder „bis 29.09.2026“.');
+  }
+  if(question.id==='goal'){
+    const onlyTime=/^\s*\d+\s*(tag|tage|woche|wochen|дн|день|дня|дней|недел)\s*$/i.test(v);
+    if(v.length<8||onlyTime)return ui('Опиши наблюдаемый результат, а не только срок. Например: «проходит 10 м с Rollator и Begleitung без потери равновесия».','Bitte ein beobachtbares Ergebnis beschreiben, nicht nur den Zeitraum.');
+  }
+  if(question.id==='painNrs'){
+    const n=Number(v.replace(',','.'));
+    if(!Number.isFinite(n)||n<0||n>10)return ui('Для NRS введи число от 0 до 10.','Für NRS bitte eine Zahl von 0 bis 10 eingeben.');
+  }
+  return '';
+}
+
 async function handleDialogueAnswer(raw){
   if(!activeDialogue)return;
   const q=currentDialogueQuestion(activeDialogue);
   if(!q)return;
+
+  const validation=validateDialogueAnswer(q,raw);
+  if(validation){dialogueBot(validation);return}
 
   let shown='';
   if(Array.isArray(raw)){
