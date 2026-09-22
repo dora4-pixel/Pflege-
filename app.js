@@ -438,10 +438,15 @@ async function finishCareDialogue(){
   const diagnosisRisk=/\bRisiko\b/i.test(selected?.meta?.title||selected?.title||'');
   const mode=(explicitRisk||diagnosisRisk)?'risk':'problem';
 
-  if(selected?.meta?.title){
+  // Formal diagnosis is taken from NANDA when a matching NANDA diagnosis exists.
+  // ENP remains the preferred source for goals/resources/measures.
+  const formalDiagnosis=mode==='risk'
+    ? (context.nandaDiagnoses?.find(d=>d.risk)||context.riskDiag||context.primaryNanda||context.primaryEnp||context.fallback)
+    : (context.nandaDiagnoses?.find(d=>!d.risk)||context.problemDiag||context.primaryNanda||context.primaryEnp||context.fallback);
+  if(formalDiagnosis?.title){
     const d={
-      kind:selected.kind,page:selected.page,bookPage:selected.bookPage||'',code:selected.meta?.code||'',
-      title:selected.meta.title,risk:mode==='risk',domain:selected.meta?.domain||'',className:selected.meta?.className||''
+      kind:formalDiagnosis.kind,page:formalDiagnosis.page,bookPage:formalDiagnosis.bookPage||'',code:formalDiagnosis.code||'',
+      title:formalDiagnosis.title,risk:mode==='risk',domain:formalDiagnosis.domain||'',className:formalDiagnosis.className||''
     };
     if(mode==='risk')context.riskDiag=d;
     else context.problemDiag=d;
