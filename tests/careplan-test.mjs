@@ -3,6 +3,7 @@ import { buildKnowledgeBase, buildWizardModel } from '../knowledgeBase.js';
 import { enrichBookIndex, calculateRelevancePercent, relevanceLabel } from '../searchEngine.js';
 import { buildPlan, makePlanningContext, planToText } from '../planEngine.js';
 import { inferSemanticQuery } from '../semanticEngine.js';
+import { createCareDialogue, currentDialogueQuestion, answerCareDialogue, compileDialogueData, dialogueSourceInfo } from '../careDialogue.js';
 
 const books=[
   {kind:'NANDA',index:{pages:[
@@ -48,6 +49,43 @@ assert.ok(model.diagnoses.length>0,'wizard should offer diagnoses');
 assert.ok(model.symptoms.length>0,'wizard should offer symptoms');
 assert.ok(model.measures.length>0,'wizard should offer measures');
 assert.ok(model.risks.some(r=>r.type==='book'),'wizard should offer risk diagnosis');
+
+// conversational SMART interview should ask relevant fall-risk questions and reuse book data
+const fallHit=enrichedBooks[0].index.pages.find(p=>p.meta?.code==='00303');
+const dialogue=createCareDialogue({
+  query:'Риск падения',
+  selectedHit:fallHit,
+  hits:enrichedBooks.flatMap(b=>b.index.pages),
+  direction:{id:'mobility-fall',title:'Mobilität / Sturzrisiko',terms:['gehen','sturz','mobilität']},
+  model,
+  concepts:[{id:'fall'},{id:'mobility'}]
+});
+const answerMap={
+  recentFall:'no',dizziness:'yes',syncope:'no',standAbility:'one_help',walkAbility:'aid',
+  walkingDetail:'Rollator, 10 Meter, Begleitung',balance:'yes',vision:'no',medRisk:'unknown',
+  environment:'no',toiletUrgency:'yes',fear:'yes',bookGoal:'custom',
+  goal:'geht 10 Meter mit Rollator und Begleitung ohne Gleichgewichtsverlust',
+  period:'7 Tage',evaluation:'täglich im Frühdienst anhand der sicheren Gehstrecke'
+};
+for(let guard=0;guard<50&&!dialogue.done;guard++){
+  const q=currentDialogueQuestion(dialogue);
+  assert.ok(q,'dialogue question missing before completion');
+  let ans=answerMap[q.id];
+  if(ans===undefined){
+    if(q.type==='multi')ans=(q.options||[]).slice(0,2).map(o=>o.value);
+    else if(q.type==='choice')ans=q.options?.[0]?.value||'unknown';
+    else ans='Testangabe';
+  }
+  answerCareDialogue(dialogue,ans,'ru');
+}
+assert.equal(dialogue.done,true,'conversational SMART interview did not finish');
+const dialogueData=compileDialogueData(dialogue);
+assert.ok(dialogueData.factors.some(x=>/Schwindel/i.test(x)),'dizziness should become a care-plan factor');
+assert.ok(dialogueData.resources.some(x=>/Rollator|10 Meter/i.test(x)),'walking detail should become a resource/context fact');
+assert.equal(dialogueData.period,'7 Tage');
+assert.match(dialogueData.goal,/10 Meter/);
+assert.ok(dialogueData.measures.length>0,'ENP measure selection should be offered in dialogue');
+assert.ok(dialogueSourceInfo(dialogue).some(x=>/Sturzprophylaxe/i.test(x.title)),'DNQP fall source missing from dialogue');
 
 const context=makePlanningContext(enrichedBooks.flatMap(b=>b.index.pages),{id:'mobility-fall'});
 assert.equal(context.sourceCompleteness.complete,true,'planning context should contain both NANDA and ENP');
