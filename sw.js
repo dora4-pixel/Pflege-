@@ -1,4 +1,4 @@
-const C='pflegebuch-static-v8';
+const C='pflegebuch-static-v9';
 const REL=['./','./style.css','./app.js','./searchEngine.js','./planEngine.js','./knowledgeBase.js','./semanticEngine.js','./clinicalKnowledge.js','./careDialogue.js','./patientStore.js','./i18n.js','./translator.js','./manifest.webmanifest','./icon.svg'];
 const asset=u=>new URL(u,self.registration.scope).href;
 self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll(REL.map(asset))).then(()=>self.skipWaiting())));
