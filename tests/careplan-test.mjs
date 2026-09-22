@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import { buildKnowledgeBase, buildWizardModel } from '../knowledgeBase.js';
+import { buildPlan, makePlanningContext, planToText } from '../planEngine.js';
+
+const books=[
+  {kind:'NANDA',index:{pages:[
+    {kind:'NANDA',page:399,text:'Domäne 4 Aktivität/Ruhe Klasse 2 Aktivität/Bewegung Diagnosencode 00365 Beeinträchtigte Gehfähigkeit\nDefinition Einschränkung, sich unabhängig zu Fuß in der Umgebung zu bewegen.\nBestimmende Merkmale\nSchwierigkeiten beim Gehen\nBeeinträchtigtes Gangbild\nBeeinflussende Faktoren\nSturzangst\nUnzureichende Muskelkraft',meta:{title:'Beeinträchtigte Gehfähigkeit',code:'00365'}},
+    {kind:'NANDA',page:635,text:'Domäne 11 Sicherheit/Schutz Klasse 2 Physische Verletzung Diagnosencode 00303 Risiko für Stürze beim Erwachsenen\nDefinition Anfälligkeit für Sturz.\nRisikofaktoren\nBeeinträchtigte physische Mobilität\nVerminderte Muskelkraft\nSturzangst',meta:{title:'Risiko für Stürze beim Erwachsenen',code:'00303'}}
+  ]}},
+  {kind:'ENP',index:{pages:[
+    {kind:'ENP',page:438,text:'Beeinträchtigtes Gehen\nKennzeichen\nUnsicheres Gangbild\nUrsachen\nReduzierte Muskelkraft\nRessourcen\nAkzeptiert Unterstützung\nPflegeziele\nGeht mit Rollator sicher\nPflegemaßnahmen\nBeim Gehen begleiten\nHilfsmittel bereitstellen',meta:{title:'Beeinträchtigtes Gehen'}},
+    {kind:'ENP',page:445,text:'Risiko des Sturzes\nUrsachen\nReduzierte Muskelkraft\nRessourcen\nIst mit dem Rollator vertraut\nPflegeziele\nBewegt sich sicher\nPflegemaßnahmen\nSturzrisiko einschätzen\nUmgebung sichern',meta:{title:'Risiko des Sturzes'}}
+  ]}}
+];
+
+const kb=buildKnowledgeBase(books);
+assert.ok(kb.count>=4,'knowledge base should contain diagnoses');
+const model=buildWizardModel(kb,books.flatMap(b=>b.index.pages),{id:'mobility-fall',title:'Mobilität / Sturzrisiko',terms:['gehen','sturz','mobilität']},'боится встать и плохо ходит');
+assert.ok(model.diagnoses.length>0,'wizard should offer diagnoses');
+assert.ok(model.symptoms.length>0,'wizard should offer symptoms');
+assert.ok(model.measures.length>0,'wizard should offer measures');
+assert.ok(model.risks.some(r=>r.type==='book'),'wizard should offer risk diagnosis');
+
+const context=makePlanningContext(books.flatMap(b=>b.index.pages),{id:'mobility-fall'});
+context.problemDiag={kind:'NANDA',page:399,code:'00365',title:'Beeinträchtigte Gehfähigkeit',risk:false};
+context.fallback=context.problemDiag;
+const plan=buildPlan(context,{
+  mode:'problem',person:'Frau A.',period:'7 Tage',situation:'hat Angst aufzustehen und geht unsicher',
+  factors:'Sturzangst; Reduzierte Muskelkraft',symptoms:'Unsicheres Gangbild',
+  resources:'Akzeptiert Unterstützung',criterion:'geht 10 Meter mit Rollator und Begleitung ohne Gleichgewichtsverlust',
+  measures:'Beim Gehen begleiten\nHilfsmittel bereitstellen'
+});
+const text=planToText(plan);
+assert.match(text,/Beeinträchtigte Gehfähigkeit/);
+assert.match(text,/10 Meter/);
+assert.match(text,/Beim Gehen begleiten/);
+console.log('careplan regression: OK');
