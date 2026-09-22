@@ -90,6 +90,7 @@ export const INTERVIEW_BANKS={
     questions:[
       {id:'recentFall',ru:'Были падения в последнее время?',de:'Gab es in letzter Zeit Stürze?',type:'choice',options:yesNo,fact:{yes:'Stürze in der Vorgeschichte'}},
       {id:'dizziness',ru:'Есть головокружение или потемнение в глазах, особенно при вставании?',de:'Bestehen Schwindel oder Schwarzwerden vor Augen, besonders beim Aufstehen?',type:'choice',options:yesNo,factor:{yes:'Schwindel beim Aufstehen'}},
+      {id:'syncope',ru:'Были обмороки или почти обмороки?',de:'Gab es Ohnmacht oder Beinahe-Ohnmacht?',type:'choice',options:yesNo,factor:{yes:'Synkope / Beinahe-Synkope'},redFlag:{yes:'Ohnmacht oder wiederholte Beinahe-Ohnmacht sollte ärztlich abgeklärt werden.'}},
       {id:'standAbility',ru:'Как пациент встаёт с кровати или стула?',de:'Wie gelingt das Aufstehen vom Bett oder Stuhl?',type:'choice',options:ability,resourceMap:{independent:'steht selbstständig auf',supervision:'steht unter Aufsicht auf',one_help:'steht mit Hilfe einer Person auf',two_help:'steht mit Hilfe von zwei Personen auf',unable:'kann nicht selbstständig aufstehen'}},
       {id:'walkAbility',ru:'Как пациент ходит?',de:'Wie geht der Patient / die Patientin?',type:'choice',options:gait,resourceMap:{independent:'geht selbstständig',aid:'geht mit Hilfsmittel',supervision:'geht unter Aufsicht',assist:'geht mit körperlicher Hilfe',unable:'ist nicht gehfähig'}},
       {id:'walkingDetail',ru:'Если ходит: с чем и примерно сколько? Например: Rollator, 10 Meter, Begleitung.',de:'Falls mobil: womit und ungefähr wie weit? Zum Beispiel Rollator, 10 Meter, Begleitung.',type:'text',askIf:a=>a.walkAbility&&a.walkAbility!=='unable'},
@@ -157,6 +158,56 @@ export const INTERVIEW_BANKS={
       {id:'period',ru:'Когда оценить результат?',de:'Wann soll das Ergebnis beurteilt werden?',type:'text'}
     ]
   },
+  elimination:{
+    concepts:['urinary','bowel'],
+    sources:['DNQP_KONTINENZ'],
+    questions:[
+      {id:'continenceType',ru:'Что именно происходит: недержание мочи, стула, запор или другое?',de:'Was liegt vor: Harninkontinenz, Stuhlinkontinenz, Obstipation oder etwas anderes?',type:'text'},
+      {id:'urge',ru:'Есть внезапный сильный позыв или пациент не успевает до туалета?',de:'Besteht starker Harndrang oder wird die Toilette nicht rechtzeitig erreicht?',type:'choice',options:yesNo},
+      {id:'nightToilet',ru:'Нужно часто вставать ночью в туалет?',de:'Muss die Person nachts häufig zur Toilette?',type:'choice',options:yesNo},
+      {id:'toiletAccess',ru:'Может самостоятельно дойти до туалета и раздеться?',de:'Kann die Person die Toilette selbstständig erreichen und sich entkleiden?',type:'choice',options:ability},
+      {id:'aids',ru:'Какие Hilfsmittel уже используются? Например: Toilettenstuhl, Vorlage, Katheter.',de:'Welche Hilfsmittel werden bereits genutzt? Zum Beispiel Toilettenstuhl, Vorlage, Katheter.',type:'text'},
+      {id:'goal',ru:'Какой конкретный результат нужен? Например: успевает в туалет днём с сопровождением.',de:'Welches konkrete Ergebnis soll erreicht werden? Zum Beispiel tagsüber mit Begleitung rechtzeitig die Toilette erreichen.',type:'text'},
+      {id:'period',ru:'Когда оценить результат?',de:'Wann soll das Ergebnis beurteilt werden?',type:'text'}
+    ]
+  },
+  selfcare:{
+    concepts:['self-care'],
+    sources:['BIBB'],
+    questions:[
+      {id:'activity',ru:'Какая Selbstpflege нарушена: мытьё, одевание, еда, туалет или другое?',de:'Welche Selbstpflege ist beeinträchtigt: Waschen, Kleiden, Essen, Toilettengang oder etwas anderes?',type:'text'},
+      {id:'ability',ru:'Что пациент может сделать сам?',de:'Was kann die Person selbstständig durchführen?',type:'text'},
+      {id:'helpLevel',ru:'Какой объём помощи нужен?',de:'Welcher Unterstützungsgrad wird benötigt?',type:'choice',options:ability},
+      {id:'aids',ru:'Есть подходящие Hilfsmittel?',de:'Sind geeignete Hilfsmittel vorhanden?',type:'choice',options:yesNo},
+      {id:'motivation',ru:'Пациент хочет участвовать и принимает помощь?',de:'Möchte die Person mitwirken und akzeptiert Unterstützung?',type:'choice',options:yesNo},
+      {id:'goal',ru:'Какой навык/часть ухода пациент должен выполнять сам?',de:'Welchen Teil der Selbstpflege soll die Person selbstständig übernehmen?',type:'text'},
+      {id:'period',ru:'Когда оценить результат?',de:'Wann soll das Ergebnis beurteilt werden?',type:'text'}
+    ]
+  },
+  sleep:{
+    concepts:['sleep'],
+    sources:['BIBB'],
+    questions:[
+      {id:'sleepIssue',ru:'В чём проблема: долго не засыпает, часто просыпается, рано просыпается или другое?',de:'Was ist das Schlafproblem: Einschlafstörung, häufiges Erwachen, frühes Erwachen oder etwas anderes?',type:'text'},
+      {id:'painNight',ru:'Мешают боль, одышка или позывы в туалет?',de:'Stören Schmerzen, Atemnot oder Toilettendrang den Schlaf?',type:'choice',options:yesNo},
+      {id:'daySleep',ru:'Много спит днём?',de:'Schläft die Person tagsüber häufig?',type:'choice',options:yesNo},
+      {id:'routine',ru:'Есть привычный вечерний ритуал, который помогает?',de:'Gibt es eine hilfreiche Abendroutine?',type:'text'},
+      {id:'goal',ru:'Какой измеримый результат нужен? Например: спит 5 часов с максимум одним пробуждением.',de:'Welches messbare Ergebnis soll erreicht werden? Zum Beispiel 5 Stunden Schlaf mit höchstens einer Unterbrechung.',type:'text'},
+      {id:'period',ru:'Когда оценить результат?',de:'Wann soll das Ergebnis beurteilt werden?',type:'text'}
+    ]
+  },
+  circulation:{
+    concepts:['circulation'],
+    sources:['GESUND_ORTHO','BIBB'],
+    questions:[
+      {id:'dizzinessStand',ru:'Есть головокружение при вставании?',de:'Besteht Schwindel beim Aufstehen?',type:'choice',options:yesNo},
+      {id:'syncope',ru:'Были обмороки или почти обмороки?',de:'Gab es Ohnmacht oder Beinahe-Ohnmacht?',type:'choice',options:yesNo,redFlag:{yes:'Ohnmacht oder wiederholte Beinahe-Ohnmacht sollte ärztlich abgeklärt werden.'}},
+      {id:'bpKnown',ru:'Есть измеренные значения давления/пульса? Если да — напиши.',de:'Sind gemessene Blutdruck-/Pulswerte bekannt? Falls ja, eingeben.',type:'text'},
+      {id:'standingHelp',ru:'Нужна помощь при вставании?',de:'Wird beim Aufstehen Unterstützung benötigt?',type:'choice',options:ability},
+      {id:'goal',ru:'Какой измеримый результат нужен?',de:'Welches messbare Ergebnis soll erreicht werden?',type:'text'},
+      {id:'period',ru:'Когда оценить результат?',de:'Wann soll das Ergebnis beurteilt werden?',type:'text'}
+    ]
+  },
   cognition:{
     concepts:['cognition'],
     sources:['AWMF_DELIR'],
@@ -191,6 +242,10 @@ export function chooseInterviewBank({query='',title='',concepts=[]}={}){
   if(ids.has('nutrition')||ids.has('swallowing')||/ernähr|глот|питан|еда/.test(hay))return 'nutrition';
   if(ids.has('breathing')||/atm|dyspn|одыш|дыш/.test(hay))return 'breathing';
   if(ids.has('cognition')||/demenz|delir|дезори|пута/.test(hay))return 'cognition';
+  if(ids.has('urinary')||ids.has('bowel')||/urin|inkont|stuhl|obstip|моч|стул|запор/.test(hay))return 'elimination';
+  if(ids.has('self-care')||/körperpflege|selbstfürs|wasch|kleid|мыть|одев|гигиен/.test(hay))return 'selfcare';
+  if(ids.has('sleep')||/schlaf|сон|спат|бессон/.test(hay))return 'sleep';
+  if(ids.has('circulation')||/kreislauf|blutdruck|puls|головокруж|давлен/.test(hay))return 'circulation';
   return 'generic';
 }
 
