@@ -262,6 +262,6 @@ export function optionsForDiagnosis(kb,key){
 
 export const frameworkInfo={
   diagnosisSchema:'PÄS(R): Pflegeproblem · Ätiologie/Einflussfaktoren · Symptome/Kennzeichen · Ressourcen. Bei Risikodiagnosen keine Symptome erfinden.',
-  smartSchema:'SMART-DE: spezifisch · messbar · attraktiv/akzeptiert · realistisch · terminiert.',
+  smartSchema:'SMART-Zielprüfung: spezifisch · messbar · akzeptiert/attraktiv · realistisch · terminiert. Der konkrete Wortlaut kann je nach Schule oder Einrichtung abweichen.',
   dnqp:'DNQP-Risikothemen dienen als Prüfhilfe. Ein Risiko wird erst übernommen, wenn es im konkreten Fall bestätigt oder durch Assessment erhoben wurde.'
 };
