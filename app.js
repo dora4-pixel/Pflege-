@@ -14,6 +14,8 @@ let hits=[];
 let engine=null;
 let lastDirection=null;
 let lastInference=[];
+let lastBySource={NANDA:[],ENP:[]};
+let lastPrimary={NANDA:null,ENP:null};
 let lastFallbackTranslation='';
 let lastQuery='';
 let currentPlan=null;
@@ -280,6 +282,8 @@ async function search(q){
   }
 
   hits=found.hits;
+  lastBySource=found.bySource||{NANDA:hits.filter(x=>x.kind==='NANDA'),ENP:hits.filter(x=>x.kind==='ENP')};
+  lastPrimary=found.primary||{NANDA:lastBySource.NANDA?.[0]||null,ENP:lastBySource.ENP?.[0]||null};
   lastDirection=found.direction;
   lastInference=(found.concepts||[]).map(x=>x.label);
   renderDirection();renderResults();
@@ -299,7 +303,9 @@ async function search(q){
     ].filter(Boolean).join('\n'));
   }else if(appMode==='books'){
     message('bot',[
-      getLang()==='de'?`Gefunden: ${hits.length} passende Pflegediagnosen in ${ms} ms. Die Prozentzahl zeigt die Suchrelevanz, nicht die medizinische Wahrscheinlichkeit.`:`Нашёл ${hits.length} подходящих Pflegediagnosen за ${ms} мс. Процент показывает релевантность запросу, а не медицинскую вероятность.`,
+      getLang()==='de'
+        ? `NANDA: ${lastPrimary.NANDA?.relevancePct??'—'}% · ENP: ${lastPrimary.ENP?.relevancePct??'—'}%. Beide Quellen werden getrennt bewertet und gemeinsam für die Pflegeplanung verwendet.`
+        : `NANDA: ${lastPrimary.NANDA?.relevancePct??'—'}% · ENP: ${lastPrimary.ENP?.relevancePct??'—'}%. Обе книги оцениваются отдельно и вместе используются для Pflegeplan.`,
       inferred,fallback
     ].filter(Boolean).join('\n'));
   }else{
@@ -332,31 +338,51 @@ function resultMetaRows(h){
   return rows;
 }
 
+function renderResultCard(h,i){
+  const planButton=appMode==='patient'
+    ? `<button class="planBtn" data-plan="${i}">${ui('Pflegeplan по вариантам','Pflegeplan auswählen')}</button>`
+    : '';
+  const rows=resultMetaRows(h).map(([k,v])=>`<div class="resultMetaRow"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
+  const related=(h.relatedPages||[]).slice(0,5);
+  const relatedHtml=related.length>1
+    ? `<div class="relatedPages"><span>${ui('Релевантные страницы','Relevante Seiten')}:</span> ${related.map(p=>`<button data-related-open="${i}:${p.page}">${p.bookPage||p.page}</button>`).join(' ')}</div>`
+    : '';
+  const bestLabel=h.sourceBest
+    ? (h.kind==='NANDA'?ui('Лучшее в NANDA · ','Beste in NANDA · '):ui('Лучшее в ENP · ','Beste in ENP · '))
+    : '';
+  return `<article class="result detailedResult">
+    <div class="resultHead">
+      <div class="rank">${h.sourceRank||i+1}</div>
+      <div class="resultBody">
+        <div class="tags"><span class="tag ${h.kind.toLowerCase()}">${h.kind}</span><span class="tag">${ui('книга стр.','Buch S.')} ${esc(h.bookPage||h.page)}</span>${h.meta?.code?`<span class="tag">${esc(h.meta.code)}</span>`:''}${Number.isFinite(h.relevancePct)?`<span class="tag relevanceTag">${bestLabel}${h.relevancePct}%</span>`:''}</div>
+        <h3>${esc(h.meta?.title||ui('Информационная страница','Informationsseite'))}</h3>
+        ${Number.isFinite(h.relevancePct)?`<div class="relevanceBlock"><div class="relevanceTop"><span>${ui('Соответствие запросу','Relevanz zur Anfrage')}</span><b>${h.relevancePct}% · ${esc(h.relevanceLabel||'')}</b></div><div class="relevanceTrack"><i style="width:${h.relevancePct}%"></i></div></div>`:''}
+        <div class="resultMetaGrid">${rows}</div>
+        ${relatedHtml}
+      </div>
+    </div>
+    <div class="resultBtns"><button class="openBtn" data-open="${i}">${ui('Открыть лучшую страницу','Beste Seite öffnen')}</button>${planButton}</div>
+  </article>`;
+}
+
 function renderResults(){
   const r=$('#results');
-  r.innerHTML=hits.map((h,i)=>{
-    const planButton=appMode==='patient'
-      ? `<button class="planBtn" data-plan="${i}">${ui('Pflegeplan по вариантам','Pflegeplan auswählen')}</button>`
-      : '';
-    const rows=resultMetaRows(h).map(([k,v])=>`<div class="resultMetaRow"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
-    const related=(h.relatedPages||[]).slice(0,5);
-    const relatedHtml=related.length>1
-      ? `<div class="relatedPages"><span>${ui('Релевантные страницы','Relevante Seiten')}:</span> ${related.map(p=>`<button data-related-open="${i}:${p.page}">${p.bookPage||p.page}</button>`).join(' ')}</div>`
-      : '';
-    return `<article class="result detailedResult">
-      <div class="resultHead">
-        <div class="rank">${i+1}</div>
-        <div class="resultBody">
-          <div class="tags"><span class="tag ${h.kind.toLowerCase()}">${h.kind}</span><span class="tag">${ui('книга стр.','Buch S.')} ${esc(h.bookPage||h.page)}</span>${h.meta?.code?`<span class="tag">${esc(h.meta.code)}</span>`:''}${Number.isFinite(h.relevancePct)?`<span class="tag relevanceTag">${i===0?ui('Лучшее · ','Beste · '):''}${h.relevancePct}%</span>`:''}</div>
-          <h3>${esc(h.meta?.title||ui('Информационная страница','Informationsseite'))}</h3>
-          ${Number.isFinite(h.relevancePct)?`<div class="relevanceBlock"><div class="relevanceTop"><span>${ui('Соответствие запросу','Relevanz zur Anfrage')}</span><b>${h.relevancePct}% · ${esc(h.relevanceLabel||'')}</b></div><div class="relevanceTrack"><i style="width:${h.relevancePct}%"></i></div></div>`:''}
-          <div class="resultMetaGrid">${rows}</div>
-          ${relatedHtml}
-        </div>
-      </div>
-      <div class="resultBtns"><button class="openBtn" data-open="${i}">${ui('Открыть лучшую страницу','Beste Seite öffnen')}</button>${planButton}</div>
-    </article>`;
-  }).join('');
+  const indexed=hits.map((h,i)=>({h,i}));
+  const sections=[];
+  for(const kind of ['NANDA','ENP']){
+    const items=indexed.filter(x=>x.h.kind===kind);
+    if(!items.length)continue;
+    const top=items[0].h;
+    const role=kind==='NANDA'
+      ? ui('Диагноз, Domäne/Klasse, Diagnosencode, признаки и факторы','Diagnose, Domäne/Klasse, Diagnosencode, Merkmale und Faktoren')
+      : ui('Практическая Pflegeplanung: Ressourcen, Ziele и Maßnahmen','Praktische Pflegeplanung: Ressourcen, Ziele und Maßnahmen');
+    sections.push(`<section class="sourceResultGroup">
+      <div class="sourceGroupHeader"><div><b>${kind}</b><span>${role}</span></div><strong>${top.relevancePct??'—'}%</strong></div>
+      ${items.map(x=>renderResultCard(x.h,x.i)).join('')}
+    </section>`);
+  }
+  r.innerHTML=sections.join('');
+
   r.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openPage(hits[+b.dataset.open]));
   r.querySelectorAll('[data-related-open]').forEach(b=>b.onclick=()=>{
     const [hitIndex,pageNo]=b.dataset.relatedOpen.split(':').map(Number);
@@ -365,7 +391,12 @@ function renderResults(){
     const page=book?.index?.pages?.find(p=>Number(p.page)===pageNo);
     if(page)openPage({...page,matchSections:base.matchSections,relatedPages:base.relatedPages});
   });
-  r.querySelectorAll('[data-plan]').forEach(b=>b.onclick=()=>{const h=hits[+b.dataset.plan];openWizard([h,...hits.filter(x=>x!==h)],lastDirection,h)});
+  r.querySelectorAll('[data-plan]').forEach(b=>b.onclick=()=>{
+    const h=hits[+b.dataset.plan];
+    const planningHits=[lastPrimary.NANDA,lastPrimary.ENP,h,...hits].filter(Boolean)
+      .filter((x,idx,arr)=>arr.findIndex(y=>y.key===x.key)===idx);
+    openWizard(planningHits,lastDirection,h);
+  });
 }
 
 async function renderPdf(book,pageNo,canvas){
