@@ -257,7 +257,14 @@ function demo(){
 }
 $('#demoBtn').onclick=demo;
 
-function message(role,text){const d=document.createElement('div');d.className='msg '+(role==='user'?'user':'bot');d.innerHTML='<span>'+esc(text)+'</span>';$('#messages').appendChild(d)}
+function message(role,text){
+  const d=document.createElement('div');
+  d.className='msg '+(role==='user'?'user':'bot');
+  d.innerHTML='<span>'+esc(cleanDisplayText(text))+'</span>';
+  $('#messages').appendChild(d);
+  d.scrollIntoView({behavior:'smooth',block:'nearest'});
+  return d;
+}
 
 
 function resetComposer(){
@@ -274,11 +281,13 @@ function dialogueComposer(question){
   const form=$('#searchForm');
   const q=$('#query');
   const send=$('#sendBtn');
-  const needsText=question?.type==='text'||!question?.type;
-  form.classList.toggle('dialogueHidden',!needsText);
-  if(!needsText)return;
-  q.placeholder=ui('Напиши ответ на вопрос…','Antwort auf die Frage eingeben…');
-  send.textContent=ui('Ответить','Antworten');
+  form.classList.remove('dialogueHidden');
+  q.placeholder=question?.type==='choice'
+    ? ui('Можно нажать кнопку или написать ответ…','Taste wählen oder Antwort schreiben…')
+    : question?.type==='multi'
+      ? ui('Можно выбрать варианты или написать ответ…','Optionen wählen oder Antwort schreiben…')
+      : ui('Напиши ответ…','Antwort schreiben…');
+  send.textContent=ui('Отправить','Senden');
   q.focus();
 }
 
@@ -379,6 +388,13 @@ function validateDialogueAnswer(question,raw){
 
 async function handleDialogueAnswer(raw){
   if(!activeDialogue)return;
+  const textRaw=Array.isArray(raw)?'':String(raw||'').trim();
+  if(textRaw&&/^(стоп|отмена|отменить|cancel|abbrechen)$/i.test(textRaw)){cancelCareDialogue();return}
+  if(textRaw&&/^(покажи\s+)?(книги|источники|страницы|quellen|bücher)$/i.test(textRaw)){
+    appendBookEvidence({concepts:lastConcepts});
+    dialogueBot(ui('Продолжаем. Ответь на последний вопрос — можно кнопкой или текстом.','Weiter. Beantworte die letzte Frage per Taste oder Text.'));
+    return;
+  }
   const q=currentDialogueQuestion(activeDialogue);
   if(!q)return;
 
@@ -405,7 +421,7 @@ function dialoguePlanningHits(hit){
     .filter((x,idx,arr)=>arr.findIndex(y=>y.kind===x.kind&&y.page===x.page&&y.meta?.title===x.meta?.title)===idx);
 }
 
-function startCareDialogue(hit){
+function startCareDialogue(hit,{preserve=true,showIntro=true,showDraft=true}={}){
   if(!knowledgeBase){toast(t('chooseBooks'));return}
   const planningHits=dialoguePlanningHits(hit);
   const model=buildWizardModel(knowledgeBase,planningHits,lastDirection,lastQuery);
@@ -419,13 +435,14 @@ function startCareDialogue(hit){
     concepts:lastConcepts
   });
 
-  $('#messages').innerHTML='';
-  const counterpart=hit.kind==='NANDA'?lastPrimary.ENP:lastPrimary.NANDA;
-  const intro=counterpart
-    ? ui('Сделаем конкретный SMART/PESR. Я буду спрашивать только то, чего не хватает. Для диагноза использую NANDA, для целей и мер — ENP.','Wir erstellen einen konkreten SMART-/PESR-Pflegeplan. Ich frage nur nach fehlenden Angaben. Für die Diagnose nutze ich NANDA, für Ziele und Maßnahmen ENP.')
-    : ui('Сделаем конкретный SMART/PESR. Я буду спрашивать недостающие данные по найденной книге.','Wir erstellen einen konkreten SMART-/PESR-Pflegeplan. Ich frage die fehlenden Angaben anhand der verfügbaren Quelle ab.');
-  dialogueBot(intro);
-  dialogueBot((hit.meta?.title||'Pflegediagnose')+' · '+hit.relevancePct+'%');
+  if(!preserve)$('#messages').innerHTML='';
+  if(showIntro){
+    dialogueBot(ui(
+      'Хорошо. Я сразу соберу основу по NANDA + ENP и дальше буду уточнять её в этом же чате.',
+      'Gut. Ich erstelle sofort die Grundlage aus NANDA + ENP und kläre sie anschließend hier im Chat.'
+    ));
+  }
+  if(showDraft)appendPreliminarySmart(hit);
   askDialogueQuestion();
 }
 
@@ -549,30 +566,35 @@ async function finishCareDialogue(){
 }
 
 
-function renderDirection(){
-  const box=$('#direction');
-  if(appMode==='books'){box.innerHTML='';return}
-  if(!hits.length){box.innerHTML='';return}
-  const ctx=makePlanningContext(hits,lastDirection);
-  const title=lastDirection?.title||ctx.problemDiag?.title||ctx.riskDiag?.title||'Найденное направление';
-  const desc=lastDirection?.description||'Соберу общий план по наиболее релевантным страницам NANDA/ENP. Перед использованием нужно заполнить только факты конкретного пациента.';
-  box.innerHTML=`<div class="directionCard"><small>${ui('Общее направление','Pflegebereich')}</small><h3>${esc(title)}</h3><p>${esc(getLang()==='de'?'Passende NANDA-/ENP-Seiten wurden lokal gefunden. Wähle anschließend nur die Patientendaten aus, die tatsächlich vorliegen.':desc)}</p><button id="generalPlanBtn">${ui('Собрать Pflegeplan по вариантам','Pflegeplan aus Varianten erstellen')}</button></div>`;
-  $('#generalPlanBtn').onclick=()=>openWizard(hits,lastDirection,null);
-}
+function renderDirection(){ $('#direction').innerHTML=''; }
+
 
 async function search(q){
   if(!books.length){toast(t('chooseBooks'));return}
   if(!engine)refreshEngine();
   if(!engine){toast(ui('Не удалось создать индекс','Index konnte nicht erstellt werden'));return}
-  lastQuery=q;lastFallbackTranslation='';message('user',q);$('#welcome').classList.add('hidden');
+
+  activeDialogue=null;
+  document.querySelectorAll('.dialogueControls').forEach(x=>x.remove());
+  resetComposer();
+  $('#direction').innerHTML='';
+  $('#results').innerHTML='';
+  $('#welcome').classList.add('hidden');
+
+  lastQuery=q;
+  lastFallbackTranslation='';
+  message('user',q);
+
+  const smartRequest=isSmartRequest(q);
+  const coreQuery=searchCoreQuery(q);
   const t0=performance.now();
 
-  let found=engine.search(q,10);
-  if(!found.hits.length && /[а-яё]/i.test(q)){
-    const translated=await translateRuDe(q);
+  let found=engine.search(coreQuery,10);
+  if(!found.hits.length && /[а-яё]/i.test(coreQuery)){
+    const translated=await translateRuDe(coreQuery);
     if(translated){
       lastFallbackTranslation=translated;
-      found=engine.search(q+' '+translated,10);
+      found=engine.search(coreQuery+' '+translated,10);
     }
   }
 
@@ -583,33 +605,34 @@ async function search(q){
   lastConcepts=found.concepts||[];
   lastRiskIntent=Boolean(found.riskIntent);
   lastInference=lastConcepts.map(x=>x.label);
-  renderDirection();renderResults();
 
   const ms=Math.max(1,Math.round(performance.now()-t0));
-  const inferred=lastInference.length
-    ? (getLang()==='de'?'Erkannt: ':'Распознано: ')+lastInference.join(' · ')+(found.riskIntent?' · '+ui('риск','Risiko'):'')
-    : '';
-  const fallback=lastFallbackTranslation
-    ? (getLang()==='de'?'Zusätzliche Übersetzung für die Suche: ':'Дополнительный перевод для поиска: ')+lastFallbackTranslation
-    : '';
 
   if(!hits.length){
     message('bot',[
-      ui('Подходящих диагнозов/информационных страниц в загруженных NANDA/ENP не найдено. Я искал не только точные слова, но и связанные понятия.','Keine passenden Diagnosen/Informationsseiten in den geladenen NANDA/ENP gefunden. Es wurden auch semantisch verwandte Begriffe geprüft.'),
-      inferred,fallback
+      ui('По загруженным NANDA/ENP я не нашёл подходящего диагноза. Попробуй описать проблему другими словами.','In den geladenen NANDA/ENP wurde keine passende Diagnose gefunden. Beschreibe das Problem bitte anders.'),
+      lastFallbackTranslation?ui('Для поиска дополнительно использовал перевод: ','Zusätzliche Suchübersetzung: ')+lastFallbackTranslation:''
     ].filter(Boolean).join('\n'));
-  }else if(appMode==='books'){
-    message('bot',[
-      getLang()==='de'
-        ? `NANDA: ${lastPrimary.NANDA?.relevancePct??'—'}% · ENP: ${lastPrimary.ENP?.relevancePct??'—'}%. Beide Quellen werden getrennt bewertet und gemeinsam für die Pflegeplanung verwendet.`
-        : `NANDA: ${lastPrimary.NANDA?.relevancePct??'—'}% · ENP: ${lastPrimary.ENP?.relevancePct??'—'}%. Обе книги оцениваются отдельно и вместе используются для Pflegeplan.`,
-      inferred,fallback
-    ].filter(Boolean).join('\n'));
+    return;
+  }
+
+  message('bot',smartRequest
+    ? ui('Понял. Сначала показываю, на чём основываюсь в NANDA и ENP, затем сразу даю SMART-черновик и продолжаю уточнять его прямо здесь.','Verstanden. Zuerst zeige ich die Grundlage aus NANDA und ENP, danach sofort einen SMART-Entwurf und kläre ihn hier im Chat weiter.')
+    : ui(`Нашёл подходящие материалы в обеих книгах за ${ms} мс. Ниже — самые релевантные страницы.`,`Passende Inhalte in den Büchern in ${ms} ms gefunden. Unten stehen die relevantesten Seiten.`)
+  );
+
+  appendBookEvidence(found);
+
+  if(smartRequest){
+    const preferred=(lastRiskIntent
+      ? (lastBySource.NANDA?.find(x=>/\bRisiko\b/i.test(x.meta?.title||''))||lastPrimary.NANDA||lastPrimary.ENP)
+      : (lastPrimary.NANDA||lastPrimary.ENP))||hits[0];
+    startCareDialogue(preferred,{preserve:true,showIntro:false,showDraft:true});
   }else{
-    message('bot',[
-      getLang()==='de'?`Gefunden: ${hits.length} passende Pflegediagnosen. Der Pflegeplan-Assistent nutzt diese als Auswahlbasis.`:`Нашёл ${hits.length} подходящих Pflegediagnosen. Pflegeplan-Assistent использует их как варианты для выбора.`,
-      inferred,fallback
-    ].filter(Boolean).join('\n'));
+    const action=document.createElement('div');
+    action.className='assistantTurn followupTurn';
+    action.innerHTML='<div class="assistantTurnLead"><b>'+ui('Что дальше?','Wie weiter?')+'</b><span>'+ui('Можешь просто продолжить писать внизу. Например: «нужен SMART по этому риску».','Du kannst unten einfach weiterschreiben, z. B. „SMART zu diesem Risiko erstellen“.')+'</span></div>';
+    $('#messages').appendChild(action);
   }
 }
 
@@ -663,40 +686,8 @@ function renderResultCard(h,i){
   </article>`;
 }
 
-function renderResults(){
-  const r=$('#results');
-  const indexed=hits.map((h,i)=>({h,i}));
-  const sections=[];
-  for(const kind of ['NANDA','ENP']){
-    const items=indexed.filter(x=>x.h.kind===kind);
-    if(!items.length)continue;
-    const top=items[0].h;
-    const role=kind==='NANDA'
-      ? ui('Диагноз, Domäne/Klasse, Diagnosencode, признаки и факторы','Diagnose, Domäne/Klasse, Diagnosencode, Merkmale und Faktoren')
-      : ui('Практическая Pflegeplanung: Ressourcen, Ziele и Maßnahmen','Praktische Pflegeplanung: Ressourcen, Ziele und Maßnahmen');
-    sections.push(`<section class="sourceResultGroup">
-      <div class="sourceGroupHeader"><div><b>${kind}</b><span>${role}</span></div><strong>${top.relevancePct??'—'}%</strong></div>
-      ${items.map(x=>renderResultCard(x.h,x.i)).join('')}
-    </section>`);
-  }
-  r.innerHTML=sections.join('');
+function renderResults(){ $('#results').innerHTML=''; }
 
-  r.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openPage(hits[+b.dataset.open]));
-  r.querySelectorAll('[data-related-open]').forEach(b=>b.onclick=()=>{
-    const [hitIndex,pageNo]=b.dataset.relatedOpen.split(':').map(Number);
-    const base=hits[hitIndex];
-    const book=byKind(base.kind);
-    const page=book?.index?.pages?.find(p=>Number(p.page)===pageNo);
-    if(page)openPage({...page,matchSections:base.matchSections,relatedPages:base.relatedPages});
-  });
-  r.querySelectorAll('[data-dialogue]').forEach(b=>b.onclick=()=>startCareDialogue(hits[+b.dataset.dialogue]));
-  r.querySelectorAll('[data-plan]').forEach(b=>b.onclick=()=>{
-    const h=hits[+b.dataset.plan];
-    const planningHits=[lastPrimary.NANDA,lastPrimary.ENP,h,...hits].filter(Boolean)
-      .filter((x,idx,arr)=>arr.findIndex(y=>y.key===x.key)===idx);
-    openWizard(planningHits,lastDirection,h);
-  });
-}
 
 async function renderPdf(book,pageNo,canvas){
   if(!book?.blob)return;
