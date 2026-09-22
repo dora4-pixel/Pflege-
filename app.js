@@ -261,25 +261,45 @@ function message(role,text){const d=document.createElement('div');d.className='m
 
 
 function resetComposer(){
+  const form=$('#searchForm');
   const q=$('#query');
   const send=$('#sendBtn');
+  form.classList.remove('dialogueHidden');
   q.placeholder=t('queryPlaceholder');
   delete q.dataset.dialogueQuestion;
   send.textContent=t('search');
 }
 
-function dialogueComposer(){
+function dialogueComposer(question){
+  const form=$('#searchForm');
   const q=$('#query');
   const send=$('#sendBtn');
-  q.placeholder=ui('Напиши ответ…','Antwort eingeben…');
+  const needsText=question?.type==='text'||!question?.type;
+  form.classList.toggle('dialogueHidden',!needsText);
+  if(!needsText)return;
+  q.placeholder=ui('Напиши ответ на вопрос…','Antwort auf die Frage eingeben…');
   send.textContent=ui('Ответить','Antworten');
   q.focus();
+}
+
+function cleanDisplayText(value=''){
+  let v=String(value??'').normalize('NFKC');
+  const fixes=[
+    ['Ã¤','ä'],['Ã¶','ö'],['Ã¼','ü'],['Ã„','Ä'],['Ã–','Ö'],['Ãœ','Ü'],['ÃŸ','ß'],
+    ['â€“','–'],['â€”','—'],['â€ž','„'],['â€œ','“'],['â€','”'],['â†’','→'],['Â','']
+  ];
+  for(const [bad,good] of fixes)v=v.split(bad).join(good);
+  v=v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,' ')
+     .replace(/�+/g,'')
+     .replace(/\s+/g,' ')
+     .trim();
+  return v;
 }
 
 function dialogueBot(text,sub=''){
   const d=document.createElement('div');
   d.className='msg bot dialogueMsg';
-  d.innerHTML='<span>'+esc(text)+'</span>'+(sub?'<small>'+esc(sub)+'</small>':'');
+  d.innerHTML='<span>'+esc(cleanDisplayText(text))+'</span>'+(sub?'<small>'+esc(cleanDisplayText(sub))+'</small>':'');
   $('#messages').appendChild(d);
   d.scrollIntoView({behavior:'smooth',block:'nearest'});
   return d;
@@ -288,7 +308,7 @@ function dialogueBot(text,sub=''){
 function dialogueUser(text){
   const d=document.createElement('div');
   d.className='msg user dialogueMsg';
-  d.innerHTML='<span>'+esc(text)+'</span>';
+  d.innerHTML='<span>'+esc(cleanDisplayText(text))+'</span>';
   $('#messages').appendChild(d);
   d.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
@@ -301,7 +321,7 @@ function renderDialogueControls(question){
   if(question.type==='choice'&&opts.length){
     const box=document.createElement('div');
     box.className='dialogueControls quickAnswers';
-    box.innerHTML=opts.map((o,i)=>'<button data-dialogue-value="'+esc(o.value)+'">'+esc(o.label)+(o.source?'<small>'+esc(o.source)+'</small>':'')+'</button>').join('')+'<button class="dialogueCancel" data-dialogue-cancel="1">'+ui('Отменить','Abbrechen')+'</button>';
+    box.innerHTML='<div class="answerHint">'+ui('Выбери один вариант','Eine Antwort auswählen')+'</div>'+opts.map((o,i)=>'<button data-dialogue-value="'+esc(o.value)+'">'+esc(cleanDisplayText(o.label))+(o.source?'<small>'+esc(cleanDisplayText(o.source))+'</small>':'')+'</button>').join('')+'<button class="dialogueCancel" data-dialogue-cancel="1">'+ui('Отменить','Abbrechen')+'</button>';
     $('#messages').appendChild(box);
     box.querySelectorAll('[data-dialogue-value]').forEach(b=>b.onclick=()=>handleDialogueAnswer(b.dataset.dialogueValue));
     box.querySelector('[data-dialogue-cancel]')?.addEventListener('click',cancelCareDialogue);
@@ -309,7 +329,7 @@ function renderDialogueControls(question){
   }else if(question.type==='multi'&&opts.length){
     const box=document.createElement('div');
     box.className='dialogueControls multiAnswers';
-    box.innerHTML='<div class="dialogueMultiGrid">'+opts.map((o,i)=>'<label><input type="checkbox" value="'+esc(o.value)+'"><span>'+esc(o.label)+(o.source?'<small>'+esc(o.source)+'</small>':'')+'</span></label>').join('')+'</div><button id="dialogueMultiOk">'+ui('Добавить выбранное','Auswahl übernehmen')+'</button><button class="dialogueCancel" data-dialogue-cancel="1">'+ui('Отменить','Abbrechen')+'</button>';
+    box.innerHTML='<div class="answerHint">'+ui('Можно выбрать несколько вариантов','Mehrere Antworten sind möglich')+'</div><div class="dialogueMultiGrid">'+opts.map((o,i)=>'<label><input type="checkbox" value="'+esc(o.value)+'"><span>'+esc(cleanDisplayText(o.label))+(o.source?'<small>'+esc(cleanDisplayText(o.source))+'</small>':'')+'</span></label>').join('')+'</div><button id="dialogueMultiOk">'+ui('Готово','Fertig')+'</button><button class="dialogueCancel" data-dialogue-cancel="1">'+ui('Отменить','Abbrechen')+'</button>';
     $('#messages').appendChild(box);
     $('#dialogueMultiOk').onclick=()=>{
       const selected=[...box.querySelectorAll('input:checked')].map(x=>x.value);
@@ -329,7 +349,7 @@ function askDialogueQuestion(){
   dialogueBot(text,sub);
   $('#query').dataset.dialogueQuestion=q.id||'';
   renderDialogueControls(q);
-  dialogueComposer();
+  dialogueComposer(q);
 }
 
 function cancelCareDialogue(){
