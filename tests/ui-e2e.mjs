@@ -36,6 +36,13 @@ try{
   assert.match(pageMeta,/Klasse|КЛАСС/i);
   await page.click('#modalClose');
 
+  await page.fill('#query','Риск раздражений кожи');
+  await page.click('#sendBtn');
+  await page.waitForSelector('.result');
+  const skinSearch=await page.locator('#results').innerText();
+  assert.match(skinSearch,/Haut|Hautintegrität/i,'semantic skin-risk search failed');
+  assert.match(skinSearch,/Risiko/i,'risk diagnosis should be surfaced for skin-risk query');
+
   await page.click('#newPatientBtn');
   await page.waitForSelector('#patientAlias');
   await page.fill('#patientAlias','Frau A.');
