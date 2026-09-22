@@ -72,6 +72,9 @@ try{
   // Composer stays visible like a normal chat; quick buttons are optional helpers.
   assert.equal(await page.locator('#searchForm').isVisible(),true,'chat composer must stay visible during SMART dialogue');
   assert.ok(await page.locator('.quickAnswers button').count()>0,'quick answer buttons missing');
+  assert.notEqual(await page.evaluate(()=>document.activeElement?.id),'query','assistant must not auto-open the iPhone keyboard for a choice question');
+  const mobileComposerBottom=await page.locator('#searchForm').evaluate(el=>getComputedStyle(el).bottom);
+  assert.notEqual(mobileComposerBottom,'70px','mobile composer must sit at the keyboard/viewport edge, not 70px above it');
   const firstQuestionText=await page.locator('.dialogueMsg.bot').last().innerText();
   assert.doesNotMatch(firstQuestionText,/�|Ã.|Â.|â€|â€“|â€”/,'garbled characters in dialogue question');
   for(let i=0;i<40;i++){
@@ -83,12 +86,14 @@ try{
       continue;
     }
     if(await page.locator('.quickAnswers button').count()){
+      await page.focus('#query');
       const buttons=page.locator('.quickAnswers button');
       let idx=0;
       const labels=await buttons.allTextContents();
       const noIdx=labels.findIndex(x=>/Нет|Nein/.test(x));
       if(noIdx>=0)idx=noIdx;
       await buttons.nth(idx).click();
+      assert.notEqual(await page.evaluate(()=>document.activeElement?.id),'query','quick answer should dismiss keyboard before the next question');
       continue;
     }
     const qid=await page.locator('#query').getAttribute('data-dialogue-question');
