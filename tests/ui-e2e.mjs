@@ -27,6 +27,13 @@ try{
   assert.match(resultText,/Diagnosencode/i,'NANDA diagnosis code missing from book search');
   assert.match(resultText,/Pflegediagnose/i,'diagnosis title context missing from book search');
   assert.match(resultText,/Treffer in|Найдено в разделе/i,'matching section missing from book search');
+  const pctTexts=await page.locator('.relevanceTag').allTextContents();
+  assert.ok(pctTexts.length>0,'relevance percentages missing');
+  const pcts=pctTexts.map(x=>Number((x.match(/(\d{1,3})%/)||[])[1])).filter(Number.isFinite);
+  assert.ok(pcts.length>0,'relevance percent values missing');
+  for(let i=1;i<pcts.length;i++)assert.ok(pcts[i-1]>=pcts[i],'results must be sorted by relevance percent');
+  assert.match(pctTexts[0],/Лучшее|Beste/,'top result should be marked best');
+
   const nandaCard=page.locator('.result').filter({hasText:'00365'}).first();
   assert.ok(await nandaCard.count(),'expected NANDA 00365 result missing');
   await nandaCard.locator('[data-open]').click();
