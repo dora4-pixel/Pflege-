@@ -71,12 +71,13 @@ try{
       await buttons.nth(idx).click();
       continue;
     }
-    const lastBot=(await page.locator('.dialogueMsg.bot').last().innerText()).toLowerCase();
+    const qid=await page.locator('#query').getAttribute('data-dialogue-question');
     let answer='Testangabe';
-    if(/срок|bis wann|zeitraum/.test(lastBot))answer='7 Tage';
-    else if(/результат|ergebnis|ziel/.test(lastBot))answer='geht 10 Meter mit Rollator und Begleitung ohne Gleichgewichtsverlust';
-    else if(/провер|evaluiert|evaluation/.test(lastBot))answer='täglich im Frühdienst anhand der Gehstrecke';
-    else if(/ходит|geht|сколько|wie weit/.test(lastBot))answer='Rollator, 10 Meter, Begleitung';
+    if(qid==='period')answer='7 Tage';
+    else if(qid==='goal')answer='geht 10 Meter mit Rollator und Begleitung ohne Gleichgewichtsverlust';
+    else if(qid==='evaluation')answer='täglich im Frühdienst anhand der Gehstrecke';
+    else if(qid==='walkingDetail')answer='Rollator, 10 Meter, Begleitung';
+    else if(qid==='painNrs')answer='3';
     await page.fill('#query',answer);
     await page.click('#sendBtn');
   }
