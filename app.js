@@ -528,7 +528,7 @@ async function search(q){
   }
 }
 
-$('#searchForm').onsubmit=e=>{e.preventDefault();const q=$('#query').value.trim();if(!q)return;$('#query').value='';search(q)};
+$('#searchForm').onsubmit=e=>{e.preventDefault();const q=$('#query').value.trim();if(!q)return;$('#query').value='';if(activeDialogue)handleDialogueAnswer(q);else search(q)};
 
 function resultMetaRows(h){
   const rows=[];
@@ -554,6 +554,7 @@ function renderResultCard(h,i){
   const planButton=appMode==='patient'
     ? `<button class="planBtn" data-plan="${i}">${ui('Pflegeplan по вариантам','Pflegeplan auswählen')}</button>`
     : '';
+  const dialogueButton=`<button class="dialogueBtn" data-dialogue="${i}">${ui('SMART-диалог','SMART-Dialog')}</button>`;
   const rows=resultMetaRows(h).map(([k,v])=>`<div class="resultMetaRow"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
   const related=(h.relatedPages||[]).slice(0,5);
   const relatedHtml=related.length>1
@@ -573,7 +574,7 @@ function renderResultCard(h,i){
         ${relatedHtml}
       </div>
     </div>
-    <div class="resultBtns"><button class="openBtn" data-open="${i}">${ui('Открыть лучшую страницу','Beste Seite öffnen')}</button>${planButton}</div>
+    <div class="resultBtns"><button class="openBtn" data-open="${i}">${ui('Открыть лучшую страницу','Beste Seite öffnen')}</button>${dialogueButton}${planButton}</div>
   </article>`;
 }
 
@@ -603,6 +604,7 @@ function renderResults(){
     const page=book?.index?.pages?.find(p=>Number(p.page)===pageNo);
     if(page)openPage({...page,matchSections:base.matchSections,relatedPages:base.relatedPages});
   });
+  r.querySelectorAll('[data-dialogue]').forEach(b=>b.onclick=()=>startCareDialogue(hits[+b.dataset.dialogue]));
   r.querySelectorAll('[data-plan]').forEach(b=>b.onclick=()=>{
     const h=hits[+b.dataset.plan];
     const planningHits=[lastPrimary.NANDA,lastPrimary.ENP,h,...hits].filter(Boolean)
