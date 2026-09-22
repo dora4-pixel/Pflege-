@@ -1,0 +1,1 @@
+{"name":"PflegeBuch Finder","short_name":"PflegeBuch","description":"NANDA/ENP поиск, перевод и SMART Pflegeplanung","start_url":"./","scope":"./","display":"standalone","background_color":"#f4f7f9","theme_color":"#102433","lang":"ru","icons":[{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
