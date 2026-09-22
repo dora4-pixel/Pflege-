@@ -406,10 +406,31 @@ function renderDialoguePlanCard(german,russian,data,sources){
   d.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
+
+async function germanizeValue(value){
+  const v=String(value||'').trim();
+  if(!v||!/[а-яё]/i.test(v))return v;
+  try{return (await translateRuDe(v))||v}catch{return v}
+}
+
+async function germanizeDialogueData(data){
+  const translateArray=async arr=>Promise.all((arr||[]).map(germanizeValue));
+  const [factors,symptoms,resources,goal,period,evaluation]=await Promise.all([
+    translateArray(data.factors),
+    translateArray(data.symptoms),
+    translateArray(data.resources),
+    germanizeValue(data.goal),
+    germanizeValue(data.period),
+    germanizeValue(data.evaluation)
+  ]);
+  return {...data,factors,symptoms,resources,goal,period,evaluation};
+}
+
 async function finishCareDialogue(){
   if(!activeDialogue)return;
   const session=activeDialogue;
-  const data=compileDialogueData(session);
+  const rawData=compileDialogueData(session);
+  const data=await germanizeDialogueData(rawData);
   const context=makePlanningContext(session.hits,session.direction);
   const selected=session.selectedHit||context.primaryNanda||context.primaryEnp||context.fallback;
 
