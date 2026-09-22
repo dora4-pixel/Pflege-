@@ -51,6 +51,44 @@ try{
   assert.match(pageMeta,/Klasse|КЛАСС/i);
   await page.click('#modalClose');
 
+  // live SMART dialogue from a concrete search result
+  await nandaCard.locator('[data-dialogue]').click();
+  await page.waitForSelector('.dialogueMsg');
+  for(let i=0;i<40;i++){
+    if(await page.locator('.dialoguePlanCard').count())break;
+    if(await page.locator('.multiAnswers').count()){
+      const checks=page.locator('.multiAnswers input[type="checkbox"]');
+      if(await checks.count())await checks.first().check();
+      await page.locator('#dialogueMultiOk').click();
+      continue;
+    }
+    if(await page.locator('.quickAnswers button').count()){
+      const buttons=page.locator('.quickAnswers button');
+      let idx=0;
+      const labels=await buttons.allTextContents();
+      const noIdx=labels.findIndex(x=>/Нет|Nein/.test(x));
+      if(noIdx>=0)idx=noIdx;
+      await buttons.nth(idx).click();
+      continue;
+    }
+    const lastBot=(await page.locator('.dialogueMsg.bot').last().innerText()).toLowerCase();
+    let answer='Testangabe';
+    if(/срок|bis wann|zeitraum/.test(lastBot))answer='7 Tage';
+    else if(/результат|ergebnis|ziel/.test(lastBot))answer='geht 10 Meter mit Rollator und Begleitung ohne Gleichgewichtsverlust';
+    else if(/провер|evaluiert|evaluation/.test(lastBot))answer='täglich im Frühdienst anhand der Gehstrecke';
+    else if(/ходит|geht|сколько|wie weit/.test(lastBot))answer='Rollator, 10 Meter, Begleitung';
+    await page.fill('#query',answer);
+    await page.click('#sendBtn');
+  }
+  await page.waitForSelector('.dialoguePlanCard',{timeout:15000});
+  const chatPlan=await page.locator('.dialoguePlanCard').innerText();
+  assert.match(chatPlan,/SMART/i,'SMART missing from conversational plan');
+  assert.match(chatPlan,/NANDA/i,'NANDA source missing from conversational plan');
+  assert.match(chatPlan,/ENP/i,'ENP source missing from conversational plan');
+  assert.match(chatPlan,/RU/i,'Russian translation block missing');
+  assert.match(chatPlan,/DNQP/i,'authoritative nursing source missing');
+  await page.click('#dialogueNew');
+
   await page.fill('#query','Риск раздражений кожи');
   await page.click('#sendBtn');
   await page.waitForSelector('.result');
