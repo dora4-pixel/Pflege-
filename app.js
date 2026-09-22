@@ -277,6 +277,40 @@ function resetComposer(){
   send.textContent=t('search');
 }
 
+function ensureConversationTailVisible(){
+  const form=$('#searchForm');
+  const target=document.querySelector('.dialogueControls:last-of-type')||
+    document.querySelector('.dialogueMsg.bot:last-of-type')||
+    document.querySelector('#messages > *:last-child');
+  if(!form||!target)return;
+
+  const composerH=Math.ceil(form.getBoundingClientRect().height||76);
+  document.documentElement.style.setProperty('--composer-h',composerH+'px');
+
+  const visibleBottom=Math.min(
+    window.innerHeight,
+    window.visualViewport?.height ? window.visualViewport.height + (window.visualViewport.offsetTop||0) : window.innerHeight
+  );
+  const composerTop=Math.min(form.getBoundingClientRect().top,visibleBottom);
+  const safeBottom=composerTop-14;
+  const r=target.getBoundingClientRect();
+
+  if(r.bottom>safeBottom){
+    window.scrollBy({top:r.bottom-safeBottom+10,left:0,behavior:'smooth'});
+  }else if(r.top<10){
+    window.scrollBy({top:r.top-18,left:0,behavior:'smooth'});
+  }
+}
+
+let viewportScrollTimer=null;
+function scheduleConversationViewportFix(){
+  if(!activeDialogue)return;
+  clearTimeout(viewportScrollTimer);
+  viewportScrollTimer=setTimeout(()=>ensureConversationTailVisible(),70);
+}
+window.visualViewport?.addEventListener('resize',scheduleConversationViewportFix);
+window.visualViewport?.addEventListener('scroll',scheduleConversationViewportFix);
+
 function dialogueComposer(question){
   const form=$('#searchForm');
   const q=$('#query');
@@ -288,7 +322,12 @@ function dialogueComposer(question){
       ? ui('Можно выбрать варианты или написать ответ…','Optionen wählen oder Antwort schreiben…')
       : ui('Напиши ответ…','Antwort schreiben…');
   send.textContent=ui('Отправить','Senden');
-  q.focus();
+
+  // Like a normal messenger: an assistant question must never force-open
+  // the iPhone keyboard. For button questions we also close an already
+  // open keyboard so it cannot cover the answer options.
+  if((question?.type==='choice'||question?.type==='multi') && document.activeElement===q)q.blur();
+  requestAnimationFrame(()=>ensureConversationTailVisible());
 }
 
 function cleanDisplayText(value=''){
@@ -359,6 +398,7 @@ function askDialogueQuestion(){
   $('#query').dataset.dialogueQuestion=q.id||'';
   renderDialogueControls(q);
   dialogueComposer(q);
+  setTimeout(()=>ensureConversationTailVisible(),80);
 }
 
 function cancelCareDialogue(){
@@ -388,6 +428,8 @@ function validateDialogueAnswer(question,raw){
 
 async function handleDialogueAnswer(raw){
   if(!activeDialogue)return;
+  const queryEl=$('#query');
+  if(document.activeElement===queryEl)queryEl.blur();
   const textRaw=Array.isArray(raw)?'':String(raw||'').trim();
   if(textRaw&&/^(стоп|отмена|отменить|cancel|abbrechen)$/i.test(textRaw)){cancelCareDialogue();return}
   if(textRaw&&/^(покажи\s+)?(книги|источники|страницы|quellen|bücher)$/i.test(textRaw)){
