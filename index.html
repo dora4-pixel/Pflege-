@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#102433">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PflegeBuch">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <link rel="icon" href="./icon.svg">
+  <link rel="stylesheet" href="./style.css">
+  <title>PflegeBuch Finder</title>
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand"><div class="logo">PB</div><div><b>PflegeBuch Finder</b><small>NANDA · ENP · SMART</small></div></div>
+      <div class="privacy"><b data-i18n="books">Локальные книги</b><span data-i18n="privacy">PDF остаются на устройстве. Для перевода отправляется только текст выбранной страницы.</span></div>
+
+      <div class="patientSideActions">
+        <button id="newPatientBtn" class="accent" data-i18n="newPatient">Новый пациент</button>
+        <button id="patientsBtn" class="secondary" data-i18n="patients">Пациенты</button>
+      </div>
+
+      <div id="books"></div>
+      <button id="nandaBtn" class="secondary" data-i18n="addNanda">＋ Добавить NANDA PDF</button>
+      <button id="enpBtn" class="secondary" data-i18n="addEnp">＋ Добавить ENP PDF</button>
+      <button id="demoBtn" class="accent" data-i18n="demo">Запустить демо</button>
+      <button id="installBtn" class="secondary" data-i18n="install">Установка на iPhone</button>
+      <input id="nandaFile" type="file" accept="application/pdf" hidden>
+      <input id="enpFile" type="file" accept="application/pdf" hidden>
+    </aside>
+
+    <main class="main">
+      <header>
+        <div><h1>PflegeBuch Finder</h1><p data-i18n="subtitle">Быстрый локальный поиск по NANDA/ENP</p></div>
+        <div class="headerActions">
+          <button id="headerPatientsBtn" class="headerBtn" data-i18n="patients">Пациенты</button>
+          <button id="headerNewPatientBtn" class="headerBtn strong" data-i18n="newPatient">Новый пациент</button>
+          <button id="langBtn" class="headerBtn langBtn">DE</button>
+          <div id="status" class="pill" data-i18n="noBooks">Нет книг</div>
+        </div>
+      </header>
+
+      <div id="patientBar" class="patientBar hidden">
+        <button id="backPatientsBtn" class="patientBack">←</button>
+        <div class="patientBarText"><small data-i18n="activePatient">Активный пациент</small><b id="activePatientAlias"></b><span id="activePatientSituation"></span></div>
+        <button id="editPatientBtn" class="patientEdit" data-i18n="editPatient">Изменить</button>
+      </div>
+
+      <section class="content">
+        <div id="welcome" class="welcome">
+          <div class="bigLogo">PB</div>
+          <h2 data-i18n="welcomeTitle">Диагноз → страница → Pflegeplan</h2>
+          <p data-i18n="welcomeText">Добавь свои PDF или включи демо. Поиск выполняется локально на устройстве.</p>
+        </div>
+        <div id="messages"></div>
+        <div id="direction"></div>
+        <div id="results"></div>
+      </section>
+
+      <form id="searchForm" class="composer">
+        <textarea id="query" rows="2" enterkeyhint="search" data-i18n-placeholder="queryPlaceholder" placeholder="Например: боится встать и плохо ходит, риск падения, одышка…"></textarea>
+        <button id="sendBtn" type="submit" data-i18n="search">Найти</button>
+      </form>
+    </main>
+  </div>
+
+  <div id="toast"></div>
+  <div id="progress" class="progressBox hidden"><b id="progressTitle"></b><span id="progressText"></span><div class="bar"><i id="progressBar"></i></div></div>
+
+  <div id="modal" class="modalWrap hidden">
+    <div class="modal">
+      <button id="modalLangBtn" class="modalLang">DE</button><button id="modalClose" class="close" aria-label="Закрыть">×</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/minisearch@7.2.0/dist/umd/index.min.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
