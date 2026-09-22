@@ -51,8 +51,13 @@ try{
   assert.match(pageMeta,/Klasse|КЛАСС/i);
   await page.click('#modalClose');
 
-  // live SMART dialogue from a concrete search result
-  await nandaCard.locator('[data-dialogue]').click();
+  // live SMART dialogue for the concrete "Sturzrisiko" case
+  await page.fill('#query','риск падения');
+  await page.click('#sendBtn');
+  await page.waitForSelector('.result');
+  const fallRiskCard=page.locator('.result').filter({hasText:'00303'}).first();
+  assert.ok(await fallRiskCard.count(),'expected NANDA Sturzrisiko 00303 result missing');
+  await fallRiskCard.locator('[data-dialogue]').click();
   await page.waitForSelector('.dialogueMsg');
   for(let i=0;i<40;i++){
     if(await page.locator('.dialoguePlanCard').count())break;
