@@ -212,7 +212,7 @@ export function planToText(plan){
   ];
   if(plan.measures.length) plan.measures.forEach((m,i)=>lines.push(`${i+1}. ${m}`));
   else lines.push('[passende Maßnahmen aus den Quellen auswählen und patientenspezifisch konkretisieren]');
-  lines.push('',`Evaluation: ${timePhrase(plan.period)} anhand des vereinbarten Messkriteriums prüfen und dokumentieren.`);
+  lines.push('',`Evaluation: ${plan.evaluationCriterion||timePhrase(plan.period)+' anhand des vereinbarten Messkriteriums prüfen und dokumentieren.'}`);
   if(plan.sources.length)lines.push(`Quellen: ${plan.sources.join(' · ')}`);
   return lines.join('\n');
 }
