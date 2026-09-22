@@ -15,6 +15,8 @@ let hits=[];
 let engine=null;
 let lastDirection=null;
 let lastInference=[];
+let lastConcepts=[];
+let lastRiskIntent=false;
 let lastBySource={NANDA:[],ENP:[]};
 let lastPrimary={NANDA:null,ENP:null};
 let lastFallbackTranslation='';
@@ -394,7 +396,7 @@ function startCareDialogue(hit){
     direction:lastDirection,
     patient:activePatient,
     model,
-    concepts:[]
+    concepts:lastConcepts
   });
 
   $('#messages').innerHTML='';
@@ -558,7 +560,9 @@ async function search(q){
   lastBySource=found.bySource||{NANDA:hits.filter(x=>x.kind==='NANDA'),ENP:hits.filter(x=>x.kind==='ENP')};
   lastPrimary=found.primary||{NANDA:lastBySource.NANDA?.[0]||null,ENP:lastBySource.ENP?.[0]||null};
   lastDirection=found.direction;
-  lastInference=(found.concepts||[]).map(x=>x.label);
+  lastConcepts=found.concepts||[];
+  lastRiskIntent=Boolean(found.riskIntent);
+  lastInference=lastConcepts.map(x=>x.label);
   renderDirection();renderResults();
 
   const ms=Math.max(1,Math.round(performance.now()-t0));
