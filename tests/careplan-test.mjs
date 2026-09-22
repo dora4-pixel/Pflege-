@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { buildKnowledgeBase, buildWizardModel } from '../knowledgeBase.js';
 import { enrichBookIndex } from '../searchEngine.js';
 import { buildPlan, makePlanningContext, planToText } from '../planEngine.js';
+import { inferSemanticQuery } from '../semanticEngine.js';
 
 const books=[
   {kind:'NANDA',index:{pages:[
@@ -21,6 +22,10 @@ const impaired=kb.entries.find(e=>e.code==='00365');
 assert.ok(impaired,'NANDA diagnosis 00365 missing');
 assert.match(impaired.domain,/4 Aktivität\/Ruhe/);
 assert.match(impaired.className,/2 Aktivität\/Bewegung/);
+const skinSemantic=inferSemanticQuery('Риск раздражений кожи');
+assert.equal(skinSemantic.riskIntent,true,'risk intent should be detected');
+assert.ok(skinSemantic.concepts.some(x=>x.id==='skin-integrity'),'skin concept should be inferred');
+assert.ok(skinSemantic.terms.includes('hautintegrität'),'German skin-integrity term should be expanded');
 const model=buildWizardModel(kb,enrichedBooks.flatMap(b=>b.index.pages),{id:'mobility-fall',title:'Mobilität / Sturzrisiko',terms:['gehen','sturz','mobilität']},'боится встать и плохо ходит');
 assert.ok(model.diagnoses.length>0,'wizard should offer diagnoses');
 assert.ok(model.symptoms.length>0,'wizard should offer symptoms');
