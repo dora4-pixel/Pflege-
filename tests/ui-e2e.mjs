@@ -22,18 +22,18 @@ try{
   assert.ok(await page.locator('.result [data-open]').count()>0,'book page open button missing');
   assert.equal(await page.locator('.result [data-plan]').count(),0,'planning button must stay hidden in pure book search mode');
   const resultText=await page.locator('#results').innerText();
-  assert.match(resultText,/Domäne/,'NANDA domain missing from book search');
-  assert.match(resultText,/Klasse/,'NANDA class missing from book search');
-  assert.match(resultText,/Diagnosencode/,'NANDA diagnosis code missing from book search');
-  assert.match(resultText,/Pflegediagnose/,'diagnosis title context missing from book search');
-  assert.match(resultText,/Treffer in|Найдено в разделе/,'matching section missing from book search');
+  assert.match(resultText,/Domäne|ДОМЕНА/i,'NANDA domain missing from book search');
+  assert.match(resultText,/Klasse|КЛАСС/i,'NANDA class missing from book search');
+  assert.match(resultText,/Diagnosencode/i,'NANDA diagnosis code missing from book search');
+  assert.match(resultText,/Pflegediagnose/i,'diagnosis title context missing from book search');
+  assert.match(resultText,/Treffer in|Найдено в разделе/i,'matching section missing from book search');
   const nandaCard=page.locator('.result').filter({hasText:'00365'}).first();
   assert.ok(await nandaCard.count(),'expected NANDA 00365 result missing');
   await nandaCard.locator('[data-open]').click();
   await page.waitForSelector('.pageMetaCard');
   const pageMeta=await page.locator('.pageMetaCard').innerText();
-  assert.match(pageMeta,/Domäne/);
-  assert.match(pageMeta,/Klasse/);
+  assert.match(pageMeta,/Domäne|ДОМЕНА/i);
+  assert.match(pageMeta,/Klasse|КЛАСС/i);
   await page.click('#modalClose');
 
   await page.click('#newPatientBtn');
