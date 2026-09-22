@@ -282,14 +282,14 @@ function resultMetaRows(h){
   const topic=h.meta?.topic||h.meta?.area||lastDirection?.title||'';
   if(topic)rows.push([ui('Тема / Pflegebereich','Thema / Pflegebereich'),topic]);
   if(h.kind==='NANDA'){
-    rows.push([ui('Домена','Domäne'),h.meta?.domain||'—']);
-    rows.push([ui('Класс','Klasse'),h.meta?.className||'—']);
-    rows.push([ui('Diagnosencode','Diagnosencode'),h.meta?.code||'—']);
+    rows.push(['Domäne',h.meta?.domain||'—']);
+    rows.push(['Klasse',h.meta?.className||'—']);
+    rows.push(['Diagnosencode',h.meta?.code||'—']);
   }else{
     rows.push([ui('Система','System'),'ENP']);
     rows.push([ui('Область','Bereich'),h.meta?.area||'—']);
   }
-  rows.push([ui('Pflegediagnose','Pflegediagnose'),h.meta?.title||'—']);
+  rows.push(['Pflegediagnose',h.meta?.title||'—']);
   if(h.matchSections?.length)rows.push([ui('Найдено в разделе','Treffer in'),h.matchSections.join(' · ')]);
   const bestBook=h.bookPage?String(h.bookPage):'';
   rows.push([ui('Страница книги','Buchseite'),bestBook||String(h.page)]);
