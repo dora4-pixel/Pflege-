@@ -5,6 +5,7 @@ import { buildKnowledgeBase, buildWizardModel, optionsForDiagnosis, frameworkInf
 import { listPatients, getPatient, savePatient, deletePatient, getActivePatientId, setActivePatientId } from './patientStore.js';
 import { getLang, toggleLang, t, bi, applyStaticI18n } from './i18n.js';
 import { translateDeRu, translateRuDe } from './translator.js';
+import { createCareDialogue, currentDialogueQuestion, answerCareDialogue, dialogueQuickOptions, compileDialogueData, dialogueSourceInfo, dialogueSummary } from './careDialogue.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs';
 
@@ -24,6 +25,7 @@ let activePatient=null;
 let patientCache=[];
 let reopenModal=null;
 let appMode='books';
+let activeDialogue=null;
 
 const byKind=k=>books.find(b=>b.kind===k);
 const ui=(ru,de)=>bi(ru,de);
@@ -253,6 +255,216 @@ function demo(){
 $('#demoBtn').onclick=demo;
 
 function message(role,text){const d=document.createElement('div');d.className='msg '+(role==='user'?'user':'bot');d.innerHTML='<span>'+esc(text)+'</span>';$('#messages').appendChild(d)}
+
+
+function resetComposer(){
+  const q=$('#query');
+  const send=$('#sendBtn');
+  q.placeholder=t('queryPlaceholder');
+  send.textContent=t('search');
+}
+
+function dialogueComposer(){
+  const q=$('#query');
+  const send=$('#sendBtn');
+  q.placeholder=ui('Напиши ответ…','Antwort eingeben…');
+  send.textContent=ui('Ответить','Antworten');
+  q.focus();
+}
+
+function dialogueBot(text,sub=''){
+  const d=document.createElement('div');
+  d.className='msg bot dialogueMsg';
+  d.innerHTML='<span>'+esc(text)+'</span>'+(sub?'<small>'+esc(sub)+'</small>':'');
+  $('#messages').appendChild(d);
+  d.scrollIntoView({behavior:'smooth',block:'nearest'});
+  return d;
+}
+
+function dialogueUser(text){
+  const d=document.createElement('div');
+  d.className='msg user dialogueMsg';
+  d.innerHTML='<span>'+esc(text)+'</span>';
+  $('#messages').appendChild(d);
+  d.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function renderDialogueControls(question){
+  document.querySelectorAll('.dialogueControls').forEach(x=>x.remove());
+  if(!question)return;
+
+  const opts=dialogueQuickOptions(question,getLang());
+  if(question.type==='choice'&&opts.length){
+    const box=document.createElement('div');
+    box.className='dialogueControls quickAnswers';
+    box.innerHTML=opts.map((o,i)=>'<button data-dialogue-value="'+esc(o.value)+'">'+esc(o.label)+(o.source?'<small>'+esc(o.source)+'</small>':'')+'</button>').join('');
+    $('#messages').appendChild(box);
+    box.querySelectorAll('[data-dialogue-value]').forEach(b=>b.onclick=()=>handleDialogueAnswer(b.dataset.dialogueValue));
+    box.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }else if(question.type==='multi'&&opts.length){
+    const box=document.createElement('div');
+    box.className='dialogueControls multiAnswers';
+    box.innerHTML='<div class="dialogueMultiGrid">'+opts.map((o,i)=>'<label><input type="checkbox" value="'+esc(o.value)+'"><span>'+esc(o.label)+(o.source?'<small>'+esc(o.source)+'</small>':'')+'</span></label>').join('')+'</div><button id="dialogueMultiOk">'+ui('Добавить выбранное','Auswahl übernehmen')+'</button>';
+    $('#messages').appendChild(box);
+    $('#dialogueMultiOk').onclick=()=>{
+      const selected=[...box.querySelectorAll('input:checked')].map(x=>x.value);
+      handleDialogueAnswer(selected);
+    };
+    box.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+}
+
+function askDialogueQuestion(){
+  if(!activeDialogue)return;
+  const q=currentDialogueQuestion(activeDialogue);
+  if(!q){finishCareDialogue();return}
+  const text=getLang()==='de'?(q.de||q.ru):(q.ru||q.de);
+  const sub=q.note||'';
+  dialogueBot(text,sub);
+  renderDialogueControls(q);
+  dialogueComposer();
+}
+
+async function handleDialogueAnswer(raw){
+  if(!activeDialogue)return;
+  const q=currentDialogueQuestion(activeDialogue);
+  if(!q)return;
+
+  let shown='';
+  if(Array.isArray(raw)){
+    const opts=dialogueQuickOptions(q,getLang());
+    shown=raw.map(v=>opts.find(o=>o.value===v)?.label||v).join('; ')||ui('Ничего не выбрано','Keine Auswahl');
+  }else{
+    const opts=dialogueQuickOptions(q,getLang());
+    shown=opts.find(o=>o.value===raw)?.label||String(raw||'');
+  }
+  dialogueUser(shown);
+  document.querySelectorAll('.dialogueControls').forEach(x=>x.remove());
+  answerCareDialogue(activeDialogue,raw,getLang());
+  if(activeDialogue.done)await finishCareDialogue();
+  else askDialogueQuestion();
+}
+
+function dialoguePlanningHits(hit){
+  return [lastPrimary.NANDA,lastPrimary.ENP,hit,...hits].filter(Boolean)
+    .filter((x,idx,arr)=>arr.findIndex(y=>y.kind===x.kind&&y.page===x.page&&y.meta?.title===x.meta?.title)===idx);
+}
+
+function startCareDialogue(hit){
+  if(!knowledgeBase){toast(t('chooseBooks'));return}
+  const planningHits=dialoguePlanningHits(hit);
+  const model=buildWizardModel(knowledgeBase,planningHits,lastDirection,lastQuery);
+  activeDialogue=createCareDialogue({
+    query:lastQuery,
+    selectedHit:hit,
+    hits:planningHits,
+    direction:lastDirection,
+    patient:activePatient,
+    model,
+    concepts:[]
+  });
+
+  $('#messages').innerHTML='';
+  const counterpart=hit.kind==='NANDA'?lastPrimary.ENP:lastPrimary.NANDA;
+  const intro=counterpart
+    ? ui('Сделаем конкретный SMART/PESR. Я буду спрашивать только то, чего не хватает. Для диагноза использую NANDA, для целей и мер — ENP.','Wir erstellen einen konkreten SMART-/PESR-Pflegeplan. Ich frage nur nach fehlenden Angaben. Für die Diagnose nutze ich NANDA, für Ziele und Maßnahmen ENP.')
+    : ui('Сделаем конкретный SMART/PESR. Я буду спрашивать недостающие данные по найденной книге.','Wir erstellen einen konkreten SMART-/PESR-Pflegeplan. Ich frage die fehlenden Angaben anhand der verfügbaren Quelle ab.');
+  dialogueBot(intro);
+  dialogueBot((hit.meta?.title||'Pflegediagnose')+' · '+hit.relevancePct+'%');
+  askDialogueQuestion();
+}
+
+function renderDialoguePlanCard(german,russian,data,sources){
+  const d=document.createElement('div');
+  d.className='dialoguePlanCard';
+  const warnings=data.redFlags?.length
+    ? '<div class="dialogueWarnings"><b>'+ui('Требует дополнительной оценки','Zusätzliche Abklärung erforderlich')+'</b>'+data.redFlags.map(x=>'<p>'+esc(x)+'</p>').join('')+'</div>'
+    : '';
+  const sourceHtml=sources?.length
+    ? '<details class="dialogueSources"><summary>'+ui('Дополнительные источники','Zusätzliche Quellen')+'</summary>'+sources.map(x=>'<div><b>'+esc(x.title)+'</b><small>'+esc(x.role||'')+'</small></div>').join('')+'</details>'
+    : '';
+  d.innerHTML=
+    '<h3>'+ui('Готовый Pflegeplan','Fertiger Pflegeplan')+'</h3>'+
+    warnings+
+    '<div class="dialoguePlanLang"><b>DE</b><pre>'+esc(german)+'</pre></div>'+
+    '<div class="dialoguePlanLang"><b>RU</b><pre>'+esc(russian||ui('Перевод не получен.','Keine Übersetzung erhalten.'))+'</pre></div>'+
+    sourceHtml+
+    '<div class="dialoguePlanActions"><button id="dialogueCopyPlan">'+ui('Копировать','Kopieren')+'</button><button id="dialogueClassicWizard">'+ui('Открыть полный мастер','Vollständigen Assistenten öffnen')+'</button><button id="dialogueNew">'+ui('Новый диалог','Neuer Dialog')+'</button></div>';
+  $('#messages').appendChild(d);
+  $('#dialogueCopyPlan').onclick=async()=>{await navigator.clipboard.writeText(german+'\n\n'+russian);toast(ui('Скопировано','Kopiert'))};
+  $('#dialogueClassicWizard').onclick=()=>{
+    const hit=activeDialogue?.selectedHit||hits[0];
+    const ph=activeDialogue?.hits||hits;
+    activeDialogue=null;resetComposer();
+    openWizard(ph,lastDirection,hit);
+  };
+  $('#dialogueNew').onclick=()=>{
+    activeDialogue=null;resetComposer();
+    $('#messages').innerHTML='';
+    $('#query').focus();
+  };
+  d.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+async function finishCareDialogue(){
+  if(!activeDialogue)return;
+  const session=activeDialogue;
+  const data=compileDialogueData(session);
+  const context=makePlanningContext(session.hits,session.direction);
+  const selected=session.selectedHit||context.primaryNanda||context.primaryEnp||context.fallback;
+
+  const explicitRisk=session.answers.problemOrRisk==='risk'||session.answers.skinProblem==='risk';
+  const diagnosisRisk=/\bRisiko\b/i.test(selected?.meta?.title||selected?.title||'');
+  const mode=(explicitRisk||diagnosisRisk)?'risk':'problem';
+
+  if(selected?.meta?.title){
+    const d={
+      kind:selected.kind,page:selected.page,bookPage:selected.bookPage||'',code:selected.meta?.code||'',
+      title:selected.meta.title,risk:mode==='risk',domain:selected.meta?.domain||'',className:selected.meta?.className||''
+    };
+    if(mode==='risk')context.riskDiag=d;
+    else context.problemDiag=d;
+    context.fallback=d;
+  }
+
+  const person=activePatient?.alias||'Frau/Herr X';
+  const plan=buildPlan(context,{
+    mode,
+    person,
+    period:data.period,
+    situation:session.query,
+    factors:data.factors.join('; '),
+    symptoms:data.symptoms.join('; '),
+    resources:data.resources.join('; '),
+    criterion:data.goal,
+    measures:data.measures.join('\n')
+  });
+  if(data.evaluation)plan.evaluationCriterion=data.evaluation;
+  plan.sources=context.sources;
+
+  const german=planToText(plan);
+  dialogueBot(ui('Готово. Формирую немецкую версию и перевод…','Fertig. Ich erstelle die deutsche Fassung und die Übersetzung…'));
+  let russian='';
+  try{russian=await translateDeRu(german)}catch{}
+  const sources=dialogueSourceInfo(session);
+  renderDialoguePlanCard(german,russian,data,sources);
+
+  if(activePatient){
+    persistPatientPlan({
+      dialogue:true,
+      diagnosisKey:selected?.key||'',
+      factors:data.factors,
+      symptoms:data.symptoms,
+      resources:data.resources,
+      measures:data.measures,
+      period:data.period,
+      criterion:data.goal,
+      redFlags:data.redFlags
+    },german+'\n\n'+russian);
+  }
+  resetComposer();
+}
+
 
 function renderDirection(){
   const box=$('#direction');
