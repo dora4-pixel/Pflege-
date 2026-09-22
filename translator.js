@@ -27,10 +27,10 @@ function splitChunk(text,maxBytes=430){
   if(current)out.push(current);
   return out;
 }
-async function one(q){
+async function one(q,langpair='de|ru'){
   const url=new URL(API);
   url.searchParams.set('q',q);
-  url.searchParams.set('langpair','de|ru');
+  url.searchParams.set('langpair',langpair);
   url.searchParams.set('mt','1');
   const r=await fetch(url,{mode:'cors',headers:{accept:'application/json'}});
   if(!r.ok)throw new Error('Translation HTTP '+r.status);
@@ -54,11 +54,27 @@ export async function translateDeRu(text){
     chunks.forEach(chunk=>{lineMap[lineIndex].push(jobs.length);jobs.push(chunk)});
   });
   const translated=await mapLimit(jobs,3,async chunk=>{
-    try{return await one(chunk)}
+    try{return await one(chunk,'de|ru')}
     catch{
       await new Promise(r=>setTimeout(r,180));
-      try{return await one(chunk)}catch{return '[не переведено] '+chunk}
+      try{return await one(chunk,'de|ru')}catch{return '[не переведено] '+chunk}
     }
   });
   return lines.map((line,i)=>line.trim()?lineMap[i].map(idx=>translated[idx]).join(' '):'').join('\n');
+}
+
+
+const queryCache=new Map();
+
+export async function translateRuDe(text){
+  const q=String(text||'').trim();
+  if(!q)return '';
+  if(queryCache.has(q))return queryCache.get(q);
+  try{
+    const translated=await one(q,'ru|de');
+    queryCache.set(q,translated);
+    return translated;
+  }catch{
+    return '';
+  }
 }
