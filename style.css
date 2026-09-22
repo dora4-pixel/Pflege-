@@ -49,3 +49,35 @@
 .quickAnswers .dialogueCancel,.multiAnswers .dialogueCancel{background:#eef3f5!important;color:#53656f!important;border:1px solid #d8e2e6!important}
 .dialogueControls button{min-height:40px}
 @media(max-width:820px){.dialogueControls{padding-bottom:8px}.quickAnswers{display:grid;grid-template-columns:1fr 1fr}.quickAnswers button{width:100%}.answerHint{grid-column:1/-1}}
+
+/* Unified conversation timeline */
+#messages{display:flex;flex-direction:column;gap:4px}
+#direction,#results{display:none}
+.assistantTurn{margin:10px 0 16px;max-width:900px}
+.assistantTurnLead{display:grid;gap:4px;padding:11px 13px;border-radius:14px;background:#fff;border:1px solid #dfe7eb}
+.assistantTurnLead b{font-size:12px;color:#203640}.assistantTurnLead span{font-size:10px;line-height:1.45;color:#687b84}
+.bookEvidenceTurn .sourceResultGroup{margin:10px 0 14px}.bookEvidenceTurn .result{margin:8px 0}
+.moreBookResults{margin-top:8px;border:1px dashed #d7e2e6;border-radius:12px;padding:7px 9px;background:#f9fbfc}
+.moreBookResults summary{cursor:pointer;font-size:10px;font-weight:800;color:#49606b}
+.moreBookResults .result{box-shadow:none}
+.preSmartCard{border:1px solid #cfe0db;background:#f4faf8;border-radius:16px;padding:13px;box-shadow:0 8px 24px rgba(29,74,68,.06)}
+.preSmartHead{display:grid;gap:3px;margin-bottom:10px}.preSmartHead b{font-size:13px;color:#174f48}.preSmartHead span{font-size:9px;color:#657b76}
+.preSmartDiagnosis,.preSmartFactors{display:grid;gap:3px;padding:8px 9px;border-radius:10px;background:#fff;border:1px solid #e0ebe7;margin:7px 0}
+.preSmartDiagnosis small,.preSmartFactors small,.preSmartMeasures small{font-size:8px;text-transform:uppercase;letter-spacing:.05em;color:#72847f}
+.preSmartDiagnosis b{font-size:11px}.preSmartFactors span{font-size:10px;line-height:1.4}
+.smartMiniGrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:9px 0}
+.smartMiniGrid>div{display:grid;gap:3px;padding:8px;background:#fff;border:1px solid #dce9e5;border-radius:10px}
+.smartMiniGrid b{font-size:11px;color:#1b756c}.smartMiniGrid span{font-size:9px;line-height:1.35;color:#344a45}
+.preSmartMeasures{padding:8px 9px;border-radius:10px;background:#fff;border:1px solid #e0ebe7}.preSmartMeasures ul{margin:6px 0 0;padding-left:18px}.preSmartMeasures li{font-size:9px;line-height:1.4;margin:3px 0}
+.preSmartNote{margin-top:8px;font-size:8px;line-height:1.4;color:#6b7e79}
+.followupTurn{margin-bottom:22px}
+.dialogueControls{margin-left:0}
+.composer.dialogueHidden{display:flex!important}
+@media(max-width:820px){
+  .assistantTurn{max-width:100%}
+  .smartMiniGrid{grid-template-columns:1fr}
+  .assistantTurnLead{padding:10px 11px}
+  .preSmartCard{padding:11px}
+  .bookEvidenceTurn .sourceResultGroup{margin:8px 0 12px}
+  .composer{bottom:calc(70px + env(safe-area-inset-bottom));border-top:1px solid #dce5e8}
+}
