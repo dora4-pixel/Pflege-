@@ -1,5 +1,26 @@
 import { getInterviewDefinition, SOURCE_REGISTRY } from './clinicalKnowledge.js';
 
+function cleanSourceText(value=''){
+  let v=String(value??'').normalize('NFKC');
+  const fixes=[
+    ['Ã¤','ä'],['Ã¶','ö'],['Ã¼','ü'],['Ã„','Ä'],['Ã–','Ö'],['Ãœ','Ü'],['ÃŸ','ß'],
+    ['â€“','–'],['â€”','—'],['â€ž','„'],['â€œ','“'],['â€','”'],['â†’','→'],['Â','']
+  ];
+  for(const [bad,good] of fixes)v=v.split(bad).join(good);
+  return v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,' ')
+    .replace(/�+/g,'')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+function readableEnough(value=''){
+  const v=cleanSourceText(value);
+  if(v.length<3)return false;
+  const letters=(v.match(/[A-Za-zÀ-ÖØ-öø-ÿА-Яа-яЁё]/g)||[]).length;
+  const odd=(v.match(/[^A-Za-zÀ-ÖØ-öø-ÿА-Яа-яЁё0-9\s.,;:()\-–—/+'%≤≥]/g)||[]).length;
+  return letters/Math.max(v.length,1)>=0.35 && odd<=Math.max(4,Math.floor(v.length*0.08));
+}
+
 function uniq(items=[]){
   const out=[],seen=new Set();
   for(const x of items){
@@ -49,8 +70,8 @@ function bookItems(items=[],limit=6){
   const out=[];
   const seen=new Set();
   for(const item of items||[]){
-    const text=String(item?.text||item||'').replace(/\s+/g,' ').trim();
-    if(text.length<3||text.length>220)continue;
+    const text=cleanSourceText(item?.text||item||'');
+    if(text.length<3||text.length>220||!readableEnough(text))continue;
     const k=text.toLowerCase();
     if(seen.has(k))continue;
     seen.add(k);
@@ -219,7 +240,7 @@ export function dialogueQuickOptions(question,lang='ru'){
   if(!question?.options?.length)return [];
   return question.options.map(o=>({
     value:o.value,
-    label:lang==='de'?(o.de||o.ru||o.value):(o.ru||o.de||o.value),
+    label:cleanSourceText(lang==='de'?(o.de||o.ru||o.value):(o.ru||o.de||o.value)),
     source:o.source||''
   }));
 }
