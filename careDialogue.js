@@ -114,6 +114,8 @@ export function createCareDialogue({query='',selectedHit=null,hits=[],direction=
   const bookGoalOptions=bookItems(model?.goals||[],5);
   if(bookGoalOptions.length){
     const idx=Math.max(0,questions.findIndex(q=>q.id==='goal'));
+    const goalQuestion=questions.find(q=>q.id==='goal');
+    if(goalQuestion)goalQuestion.askIf=a=>!a.bookGoal||a.bookGoal==='custom';
     questions.splice(idx,0,{
       id:'bookGoal',
       ru:'Из ENP/NANDA есть готовые варианты цели. Выбери основу или нажми «Своя формулировка».',
