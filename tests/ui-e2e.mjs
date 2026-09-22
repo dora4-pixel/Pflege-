@@ -14,6 +14,14 @@ try{
   await page.click('#demoBtn');
   await page.waitForTimeout(150);
 
+  // book search mode remains independent from patient planning
+  assert.ok(await page.locator('#bookSearchTab').count(),'book search tab missing');
+  await page.fill('#query','плохо ходит');
+  await page.click('#sendBtn');
+  await page.waitForSelector('.result');
+  assert.ok(await page.locator('.result [data-open]').count()>0,'book page open button missing');
+  assert.equal(await page.locator('.result [data-plan]').count(),0,'planning button must stay hidden in pure book search mode');
+
   await page.click('#newPatientBtn');
   await page.waitForSelector('#patientAlias');
   await page.fill('#patientAlias','Frau A.');
