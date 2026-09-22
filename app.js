@@ -26,6 +26,7 @@ let patientCache=[];
 let reopenModal=null;
 let appMode='books';
 let activeDialogue=null;
+let lastCompletedDialogue=null;
 
 const byKind=k=>books.find(b=>b.kind===k);
 const ui=(ru,de)=>bi(ru,de);
@@ -297,19 +298,21 @@ function renderDialogueControls(question){
   if(question.type==='choice'&&opts.length){
     const box=document.createElement('div');
     box.className='dialogueControls quickAnswers';
-    box.innerHTML=opts.map((o,i)=>'<button data-dialogue-value="'+esc(o.value)+'">'+esc(o.label)+(o.source?'<small>'+esc(o.source)+'</small>':'')+'</button>').join('');
+    box.innerHTML=opts.map((o,i)=>'<button data-dialogue-value="'+esc(o.value)+'">'+esc(o.label)+(o.source?'<small>'+esc(o.source)+'</small>':'')+'</button>').join('')+'<button class="dialogueCancel" data-dialogue-cancel="1">'+ui('Отменить','Abbrechen')+'</button>';
     $('#messages').appendChild(box);
     box.querySelectorAll('[data-dialogue-value]').forEach(b=>b.onclick=()=>handleDialogueAnswer(b.dataset.dialogueValue));
+    box.querySelector('[data-dialogue-cancel]')?.addEventListener('click',cancelCareDialogue);
     box.scrollIntoView({behavior:'smooth',block:'nearest'});
   }else if(question.type==='multi'&&opts.length){
     const box=document.createElement('div');
     box.className='dialogueControls multiAnswers';
-    box.innerHTML='<div class="dialogueMultiGrid">'+opts.map((o,i)=>'<label><input type="checkbox" value="'+esc(o.value)+'"><span>'+esc(o.label)+(o.source?'<small>'+esc(o.source)+'</small>':'')+'</span></label>').join('')+'</div><button id="dialogueMultiOk">'+ui('Добавить выбранное','Auswahl übernehmen')+'</button>';
+    box.innerHTML='<div class="dialogueMultiGrid">'+opts.map((o,i)=>'<label><input type="checkbox" value="'+esc(o.value)+'"><span>'+esc(o.label)+(o.source?'<small>'+esc(o.source)+'</small>':'')+'</span></label>').join('')+'</div><button id="dialogueMultiOk">'+ui('Добавить выбранное','Auswahl übernehmen')+'</button><button class="dialogueCancel" data-dialogue-cancel="1">'+ui('Отменить','Abbrechen')+'</button>';
     $('#messages').appendChild(box);
     $('#dialogueMultiOk').onclick=()=>{
       const selected=[...box.querySelectorAll('input:checked')].map(x=>x.value);
       handleDialogueAnswer(selected);
     };
+    box.querySelector('[data-dialogue-cancel]')?.addEventListener('click',cancelCareDialogue);
     box.scrollIntoView({behavior:'smooth',block:'nearest'});
   }
 }
@@ -323,6 +326,13 @@ function askDialogueQuestion(){
   dialogueBot(text,sub);
   renderDialogueControls(q);
   dialogueComposer();
+}
+
+function cancelCareDialogue(){
+  activeDialogue=null;
+  document.querySelectorAll('.dialogueControls').forEach(x=>x.remove());
+  resetComposer();
+  dialogueBot(ui('SMART-диалог остановлен. Можно начать новый поиск.','SMART-Dialog beendet. Eine neue Suche kann gestartet werden.'));
 }
 
 async function handleDialogueAnswer(raw){
@@ -381,7 +391,7 @@ function renderDialoguePlanCard(german,russian,data,sources){
     ? '<div class="dialogueWarnings"><b>'+ui('Требует дополнительной оценки','Zusätzliche Abklärung erforderlich')+'</b>'+data.redFlags.map(x=>'<p>'+esc(x)+'</p>').join('')+'</div>'
     : '';
   const sourceHtml=sources?.length
-    ? '<details class="dialogueSources"><summary>'+ui('Дополнительные источники','Zusätzliche Quellen')+'</summary>'+sources.map(x=>'<div><b>'+esc(x.title)+'</b><small>'+esc(x.role||'')+'</small>'+(x.url?'<a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+ui('Открыть источник','Quelle öffnen')+'</a>':'')+'</div>').join('')+'</details>'
+    ? '<div class="dialogueSourceBadges">'+sources.map(x=>'<span>'+esc(x.id)+'</span>').join('')+'</div><details class="dialogueSources"><summary>'+ui('Дополнительные источники','Zusätzliche Quellen')+'</summary>'+sources.map(x=>'<div><b>'+esc(x.title)+'</b><small>'+esc(x.role||'')+'</small>'+(x.url?'<a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+ui('Открыть источник','Quelle öffnen')+'</a>':'')+'</div>').join('')+'</details>'
     : '';
   d.innerHTML=
     '<h3>'+ui('Готовый Pflegeplan','Fertiger Pflegeplan')+'</h3>'+
@@ -393,8 +403,8 @@ function renderDialoguePlanCard(german,russian,data,sources){
   $('#messages').appendChild(d);
   $('#dialogueCopyPlan').onclick=async()=>{await navigator.clipboard.writeText(german+'\n\n'+russian);toast(ui('Скопировано','Kopiert'))};
   $('#dialogueClassicWizard').onclick=()=>{
-    const hit=activeDialogue?.selectedHit||hits[0];
-    const ph=activeDialogue?.hits||hits;
+    const hit=lastCompletedDialogue?.selectedHit||hits[0];
+    const ph=lastCompletedDialogue?.hits||hits;
     activeDialogue=null;resetComposer();
     openWizard(ph,lastDirection,hit);
   };
@@ -488,6 +498,8 @@ async function finishCareDialogue(){
       redFlags:data.redFlags
     },german+'\n\n'+russian);
   }
+  lastCompletedDialogue=session;
+  activeDialogue=null;
   resetComposer();
 }
 
