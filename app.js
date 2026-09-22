@@ -381,7 +381,7 @@ function renderDialoguePlanCard(german,russian,data,sources){
     ? '<div class="dialogueWarnings"><b>'+ui('Требует дополнительной оценки','Zusätzliche Abklärung erforderlich')+'</b>'+data.redFlags.map(x=>'<p>'+esc(x)+'</p>').join('')+'</div>'
     : '';
   const sourceHtml=sources?.length
-    ? '<details class="dialogueSources"><summary>'+ui('Дополнительные источники','Zusätzliche Quellen')+'</summary>'+sources.map(x=>'<div><b>'+esc(x.title)+'</b><small>'+esc(x.role||'')+'</small></div>').join('')+'</details>'
+    ? '<details class="dialogueSources"><summary>'+ui('Дополнительные источники','Zusätzliche Quellen')+'</summary>'+sources.map(x=>'<div><b>'+esc(x.title)+'</b><small>'+esc(x.role||'')+'</small>'+(x.url?'<a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+ui('Открыть источник','Quelle öffnen')+'</a>':'')+'</div>').join('')+'</details>'
     : '';
   d.innerHTML=
     '<h3>'+ui('Готовый Pflegeplan','Fertiger Pflegeplan')+'</h3>'+
