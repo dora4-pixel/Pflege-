@@ -99,3 +99,61 @@ The CI must fail if any of these fail:
 - plan persistence and reopening
 - RU/DE switching
 - GitHub Pages deployment
+
+
+## Dual-source search and planning contract
+NANDA and ENP are not competitors in one global ranking. They are complementary sources and are ranked independently.
+
+- **NANDA role:** formal nursing diagnosis, Domäne, Klasse, Diagnosencode, Definition, defining characteristics / risk factors.
+- **ENP role:** practical nursing-process support, especially Ressourcen, Pflegeziele and Pflegemaßnahmen.
+- If both books are loaded, the first screen must always surface the best NANDA result and the best ENP result in separate source sections.
+- A high text density in ENP must never push the best NANDA diagnosis below several ENP entries.
+- Relevance percentages are calibrated **within each source**, not normalized against the other book.
+- A semantically exact, risk-aligned, fully classified NANDA diagnosis may show 100% **search relevance**. This is not a diagnosis probability.
+- Pflegeplan generation must carry both primary sources into the planning context whenever both exist.
+
+## Anticipated failure modes and required behavior
+1. **One book uses more matching synonyms than the other.**  
+   Mitigation: semantic evidence does not require every expanded synonym; source-specific calibration prevents synonym density from suppressing another source.
+
+2. **NANDA exact diagnosis appears lower than an ENP page with many keyword matches.**  
+   Mitigation: canonical title + semantic concept + risk alignment + complete NANDA classification receives a strong relevance floor; best NANDA is surfaced independently.
+
+3. **ENP is missing but NANDA exists, or vice versa.**  
+   Mitigation: show the available source, mark the planning context as incomplete, and never pretend that both source roles are present.
+
+4. **Problem diagnosis and risk diagnosis both match.**  
+   Mitigation: preserve both; when the query explicitly expresses risk, risk-title alignment is weighted strongly. Problem diagnoses remain alternatives rather than being deleted.
+
+5. **A symptom occurs on a continuation page without title/classification.**  
+   Mitigation: continuation pages inherit diagnosis metadata only inside a bounded diagnosis span and remain grouped under the diagnosis.
+
+6. **Printed book page differs from PDF page.**  
+   Mitigation: store and display Buchseite separately from PDF-Seite.
+
+7. **Russian lay wording does not occur literally in either German book.**  
+   Mitigation: local semantic concept expansion first, cached RU→DE fallback second.
+
+8. **The same topic has several plausible diagnoses in one book.**  
+   Mitigation: show the best source-specific match first and keep alternative diagnoses below it with their own relevance scores.
+
+9. **A generic concept could produce an unjustified 100%.**  
+   Mitigation: 100% is reserved for source-complete NANDA matches where semantic concept and diagnosis type align with the query. The UI explicitly labels the number as search relevance.
+
+10. **SMART plan accidentally mixes unrelated pages.**  
+    Mitigation: planning context starts with the primary NANDA and primary ENP matches, then uses only bounded alternatives. NANDA evidence is preferred for diagnosis/factors; ENP evidence is preferred for resources/goals/measures.
+
+11. **Risk suggestions are treated as confirmed patient facts.**  
+    Mitigation: every cause, symptom, resource, risk and measure remains opt-in. DNQP areas stay risk-check prompts until confirmed by patient-specific assessment.
+
+12. **Stale local PDF indexes survive an application update.**  
+    Mitigation: stored books are re-enriched on load before search and planning engines are rebuilt.
+
+## Relevance score meaning
+The percentage means **how well a source diagnosis matches the user's search intent**. It does not mean:
+- probability that the patient has the diagnosis,
+- diagnostic certainty,
+- medical risk probability,
+- quality score of NANDA versus ENP.
+
+The two books therefore have separate top scores and separate "best in source" labels.
