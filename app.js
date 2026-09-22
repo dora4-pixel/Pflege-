@@ -242,7 +242,8 @@ function demo(){
     ].map(p=>({...p,meta:nandaMeta(p.text)}))}},
     {kind:'ENP',name:'ENP Demo',blob:null,index:{pages:[
       {kind:'ENP',page:445,text:'Bewegung/Mobilität. Risiko des Sturzes. Definition. Ursachen Reduzierte Muskelkraft; unsicheres Gehen. Ressourcen Ist mit dem Rollator vertraut; ist motiviert. Pflegeziele Bewegt sich in der Alltagsumgebung sicher. Pflegemaßnahmen Sturzrisiko einschätzen; sichere Umgebung gestalten; geeignetes Hilfsmittel bereitstellen.',meta:{}},
-      {kind:'ENP',page:438,text:'Bewegung/Mobilität. Beeinträchtigtes Gehen. Kennzeichen Unsicheres Gangbild; reduzierte Schrittlänge. Ursachen Reduzierte Muskelkraft. Ressourcen Akzeptiert Unterstützung. Pflegeziele Geht mit vereinbartem Hilfsmittel sicher. Pflegemaßnahmen Beim Gehen entsprechend Unterstützungsbedarf begleiten; Hilfsmittel bereitstellen; Gangbild beobachten.',meta:{}}
+      {kind:'ENP',page:438,text:'Bewegung/Mobilität. Beeinträchtigtes Gehen. Kennzeichen Unsicheres Gangbild; reduzierte Schrittlänge. Ursachen Reduzierte Muskelkraft. Ressourcen Akzeptiert Unterstützung. Pflegeziele Geht mit vereinbartem Hilfsmittel sicher. Pflegemaßnahmen Beim Gehen entsprechend Unterstützungsbedarf begleiten; Hilfsmittel bereitstellen; Gangbild beobachten.',meta:{}},
+      {kind:'ENP',page:512,text:'Haut/Wunde. Risiko einer beeinträchtigten Hautintegrität. Definition Gefährdung der Hautintegrität. Ursachen Feuchtigkeit; Reibung; Druckbelastung. Ressourcen Kann Hautveränderungen mitteilen. Pflegeziele Haut bleibt intakt. Pflegemaßnahmen Hautzustand beobachten; Haut trocken halten; Druck und Reibung reduzieren.',meta:{}}
     ].map(p=>({...p,meta:enpMeta(p.text)}))}}
   );
   refreshEngine();renderBooks();toast('Демо включено');
