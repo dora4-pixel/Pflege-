@@ -73,6 +73,43 @@ export function createCareDialogue({query='',selectedHit=null,hits=[],direction=
   });
 
   const questions=[...def.questions];
+  const selectedRisk=/\bRisiko\b/i.test(selectedHit?.meta?.title||'')||model?.diagnoses?.find(d=>d.title===selectedHit?.meta?.title)?.risk===true;
+
+  const factorOptions=bookItems((selectedRisk?model?.riskFactors:model?.causes)||[],6);
+  if(factorOptions.length){
+    const insertAt=Math.max(1,questions.findIndex(q=>q.id==='goal'));
+    questions.splice(insertAt,0,{
+      id:'bookFactors',
+      ru:selectedRisk?'NANDA/ENP нашли дополнительные Risikofaktoren. Какие из них реально есть у пациента?':'NANDA/ENP нашли дополнительные Ursachen/Einflussfaktoren. Какие из них реально относятся к пациенту?',
+      de:selectedRisk?'NANDA/ENP zeigen zusätzliche Risikofaktoren. Welche treffen tatsächlich zu?':'NANDA/ENP zeigen zusätzliche Ursachen/Einflussfaktoren. Welche treffen tatsächlich zu?',
+      type:'multi',
+      options:factorOptions
+    });
+  }
+
+  const symptomOptions=bookItems(model?.symptoms||[],6);
+  if(!selectedRisk&&symptomOptions.length){
+    const insertAt=Math.max(1,questions.findIndex(q=>q.id==='goal'));
+    questions.splice(insertAt,0,{
+      id:'bookSymptoms',
+      ru:'Какие Kennzeichen/Symptome из книги реально наблюдаются?',
+      de:'Welche Kennzeichen/Symptome aus dem Buch sind tatsächlich beobachtbar?',
+      type:'multi',
+      options:symptomOptions
+    });
+  }
+
+  const resourceOptions=bookItems(model?.resources||[],5);
+  if(resourceOptions.length){
+    const insertAt=Math.max(1,questions.findIndex(q=>q.id==='goal'));
+    questions.splice(insertAt,0,{
+      id:'bookResources',
+      ru:'Какие Ressourcen из книги реально есть у пациента?',
+      de:'Welche Ressourcen aus dem Buch sind tatsächlich vorhanden?',
+      type:'multi',
+      options:resourceOptions
+    });
+  }
 
   const bookGoalOptions=bookItems(model?.goals||[],5);
   if(bookGoalOptions.length){
@@ -219,11 +256,14 @@ export function compileDialogueData(session){
     '';
   const period=session.answers.period||'';
   const measures=Array.isArray(session.answers.measures)?session.answers.measures:[];
+  const bookFactors=Array.isArray(session.answers.bookFactors)?session.answers.bookFactors:[];
+  const bookSymptoms=Array.isArray(session.answers.bookSymptoms)?session.answers.bookSymptoms:[];
+  const bookResources=Array.isArray(session.answers.bookResources)?session.answers.bookResources:[];
 
   return {
-    factors:uniq([...factors,...facts]),
-    symptoms:uniq(symptoms),
-    resources:uniq(resources),
+    factors:uniq([...factors,...facts,...bookFactors]),
+    symptoms:uniq([...symptoms,...bookSymptoms]),
+    resources:uniq([...resources,...bookResources]),
     goal:String(goal||'').trim(),
     period:String(period||'').trim(),
     measures:uniq(measures),
