@@ -569,6 +569,121 @@ async function finishCareDialogue(){
 function renderDirection(){ $('#direction').innerHTML=''; }
 
 
+
+function isSmartRequest(q=''){
+  return /\bsmart\b|смарт|pflegeplan|план\s+ухода|состав(?:ь|ить).{0,25}(?:план|цель)|сделай.{0,20}(?:план|смарт)|нуж(?:ен|но|на).{0,20}(?:смарт|smart|pflegeplan)/i.test(String(q));
+}
+
+function searchCoreQuery(q=''){
+  return String(q)
+    .replace(/(?:мне\s+)?(?:нуж(?:ен|но|на)|сделай|составь|создай)\s+(?:полный\s+)?(?:smart|смарт|pflegeplan|план\s+ухода|план)/gi,' ')
+    .replace(/\b(?:smart|смарт|pflegeplan)\b/gi,' ')
+    .replace(/\s+/g,' ')
+    .trim()||String(q);
+}
+
+function bindResultActions(scope){
+  scope.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openPage(hits[+b.dataset.open]));
+  scope.querySelectorAll('[data-related-open]').forEach(b=>b.onclick=()=>{
+    const [hitIndex,pageNo]=b.dataset.relatedOpen.split(':').map(Number);
+    const base=hits[hitIndex];
+    const book=byKind(base.kind);
+    const page=book?.index?.pages?.find(p=>Number(p.page)===pageNo);
+    if(page)openPage({...page,matchSections:base.matchSections,relatedPages:base.relatedPages});
+  });
+  scope.querySelectorAll('[data-dialogue]').forEach(b=>b.onclick=()=>startCareDialogue(hits[+b.dataset.dialogue],{preserve:true}));
+  scope.querySelectorAll('[data-plan]').forEach(b=>b.onclick=()=>{
+    const h=hits[+b.dataset.plan];
+    const planningHits=[lastPrimary.NANDA,lastPrimary.ENP,h,...hits].filter(Boolean)
+      .filter((x,idx,arr)=>arr.findIndex(y=>y.key===x.key)===idx);
+    openWizard(planningHits,lastDirection,h);
+  });
+}
+
+function resultGroupsHtml(){
+  const indexed=hits.map((h,i)=>({h,i}));
+  const sections=[];
+  for(const kind of ['NANDA','ENP']){
+    const items=indexed.filter(x=>x.h.kind===kind);
+    if(!items.length)continue;
+    const top=items[0].h;
+    const role=kind==='NANDA'
+      ? ui('Диагноз и классификация','Diagnose und Klassifikation')
+      : ui('Цели, ресурсы и мероприятия','Ziele, Ressourcen und Maßnahmen');
+    const extra=items.slice(1);
+    sections.push(`<section class="sourceResultGroup inlineSourceGroup">
+      <div class="sourceGroupHeader"><div><b>${kind}</b><span>${role}</span></div><strong>${top.relevancePct??'—'}%</strong></div>
+      ${renderResultCard(items[0].h,items[0].i)}
+      ${extra.length?`<details class="moreBookResults"><summary>${ui('Ещё варианты','Weitere Treffer')} (${extra.length})</summary>${extra.map(x=>renderResultCard(x.h,x.i)).join('')}</details>`:''}
+    </section>`);
+  }
+  return sections.join('');
+}
+
+function appendBookEvidence(found){
+  const turn=document.createElement('div');
+  turn.className='assistantTurn bookEvidenceTurn';
+  const inferred=(found?.concepts||[]).map(x=>x.label).filter(Boolean);
+  turn.innerHTML=`
+    <div class="assistantTurnLead">
+      <b>${ui('Что нашёл в твоих книгах','Treffer in deinen Büchern')}</b>
+      <span>${esc(inferred.length?inferred.join(' · '):ui('Подходящие Pflegediagnosen','Passende Pflegediagnosen'))}</span>
+    </div>
+    ${resultGroupsHtml()}
+  `;
+  $('#messages').appendChild(turn);
+  bindResultActions(turn);
+  turn.scrollIntoView({behavior:'smooth',block:'start'});
+  return turn;
+}
+
+function preliminarySmartDraft(hit){
+  const planningHits=dialoguePlanningHits(hit);
+  const context=makePlanningContext(planningHits,lastDirection);
+  const risk=lastRiskIntent||/\bRisiko\b/i.test(context.riskDiag?.title||hit?.meta?.title||'');
+  const diagnosis=risk
+    ? (context.riskDiag||context.primaryNanda||context.primaryEnp||context.fallback)
+    : (context.problemDiag||context.primaryNanda||context.primaryEnp||context.fallback);
+  const sourceGoal=context.suggestions.goals?.[0]||'';
+  const sourceFactors=context.suggestions.causes?.slice(0,3)||[];
+  const sourceMeasures=context.suggestions.measures?.slice(0,3)||[];
+  const mobility=lastDirection?.id==='mobility-fall'||/Sturz|Geh|Mobil|Beweg/i.test(diagnosis?.title||'');
+  const basisGoal=sourceGoal||(
+    mobility&&risk
+      ? 'Frau/Herr X führt Transfers und Mobilisation entsprechend dem festgelegten Unterstützungsbedarf ohne Sturz durch.'
+      : risk
+        ? 'Das identifizierte Risiko wird durch individuell festgelegte Maßnahmen reduziert; es tritt kein vermeidbares Pflegeereignis auf.'
+        : 'Das festgelegte Pflegeproblem verbessert sich anhand eines konkreten Messkriteriums.'
+  );
+  const measurable=mobility&&risk
+    ? 'kein Sturz; Gehstrecke, Hilfsmittel und Unterstützungsbedarf werden konkret festgelegt und dokumentiert'
+    : 'konkretes Messkriterium gemeinsam festlegen';
+  const factors=sourceFactors.length?sourceFactors.join('; '):ui('из книги пока нет подтверждённых факторов — уточним в чате','noch keine bestätigten Faktoren – wird im Chat geklärt');
+  return `<div class="preSmartCard">
+    <div class="preSmartHead"><b>${ui('Предварительный SMART по книгам','Vorläufiges SMART aus den Büchern')}</b><span>${ui('Сразу даю основу и дальше уточняю её в чате','Grundlage sofort, danach im Chat konkretisieren')}</span></div>
+    <div class="preSmartDiagnosis"><small>Pflegediagnose</small><b>${esc(diagnosis?.title||'Pflegediagnose')}${diagnosis?.code?' · '+esc(diagnosis.code):''}</b></div>
+    <div class="preSmartFactors"><small>${risk?'Risikofaktoren':'Ursachen / Kennzeichen'}</small><span>${esc(factors)}</span></div>
+    <div class="smartMiniGrid">
+      <div><b>S</b><span>${esc(basisGoal)}</span></div>
+      <div><b>M</b><span>${esc(measurable)}</span></div>
+      <div><b>A</b><span>${ui('согласовать с пациентом','mit Patient/in abstimmen')}</span></div>
+      <div><b>R</b><span>${ui('адаптировать к реальной подвижности и ресурсам','an Mobilität und Ressourcen anpassen')}</span></div>
+      <div><b>T</b><span>${ui('срок ещё нужно указать','Zeitraum noch festlegen')}</span></div>
+    </div>
+    ${sourceMeasures.length?`<div class="preSmartMeasures"><small>ENP Maßnahmen – ${ui('основа','Grundlage')}</small><ul>${sourceMeasures.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
+    <div class="preSmartNote">${ui('Это черновик по книгам: факты пациента считаются подтверждёнными только после твоего ответа.','Quellenentwurf: Patientendaten gelten erst nach deiner Bestätigung als gegeben.')}</div>
+  </div>`;
+}
+
+function appendPreliminarySmart(hit){
+  const turn=document.createElement('div');
+  turn.className='assistantTurn smartDraftTurn';
+  turn.innerHTML=preliminarySmartDraft(hit);
+  $('#messages').appendChild(turn);
+  turn.scrollIntoView({behavior:'smooth',block:'nearest'});
+  return turn;
+}
+
 async function search(q){
   if(!books.length){toast(t('chooseBooks'));return}
   if(!engine)refreshEngine();
