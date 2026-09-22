@@ -1,5 +1,5 @@
-const C='pflegebuch-static-v7';
-const REL=['./','./style.css','./app.js','./searchEngine.js','./planEngine.js','./knowledgeBase.js','./patientStore.js','./i18n.js','./translator.js','./manifest.webmanifest','./icon.svg'];
+const C='pflegebuch-static-v8';
+const REL=['./','./style.css','./app.js','./searchEngine.js','./planEngine.js','./knowledgeBase.js','./semanticEngine.js','./clinicalKnowledge.js','./careDialogue.js','./patientStore.js','./i18n.js','./translator.js','./manifest.webmanifest','./icon.svg'];
 const asset=u=>new URL(u,self.registration.scope).href;
 self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll(REL.map(asset))).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));
