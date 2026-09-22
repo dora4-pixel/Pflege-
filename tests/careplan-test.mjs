@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { buildKnowledgeBase, buildWizardModel } from '../knowledgeBase.js';
+import { enrichBookIndex } from '../searchEngine.js';
 import { buildPlan, makePlanningContext, planToText } from '../planEngine.js';
 
 const books=[
@@ -13,15 +14,20 @@ const books=[
   ]}}
 ];
 
-const kb=buildKnowledgeBase(books);
+const enrichedBooks=books.map(enrichBookIndex);
+const kb=buildKnowledgeBase(enrichedBooks);
 assert.ok(kb.count>=4,'knowledge base should contain diagnoses');
-const model=buildWizardModel(kb,books.flatMap(b=>b.index.pages),{id:'mobility-fall',title:'Mobilität / Sturzrisiko',terms:['gehen','sturz','mobilität']},'боится встать и плохо ходит');
+const impaired=kb.entries.find(e=>e.code==='00365');
+assert.ok(impaired,'NANDA diagnosis 00365 missing');
+assert.match(impaired.domain,/4 Aktivität\/Ruhe/);
+assert.match(impaired.className,/2 Aktivität\/Bewegung/);
+const model=buildWizardModel(kb,enrichedBooks.flatMap(b=>b.index.pages),{id:'mobility-fall',title:'Mobilität / Sturzrisiko',terms:['gehen','sturz','mobilität']},'боится встать и плохо ходит');
 assert.ok(model.diagnoses.length>0,'wizard should offer diagnoses');
 assert.ok(model.symptoms.length>0,'wizard should offer symptoms');
 assert.ok(model.measures.length>0,'wizard should offer measures');
 assert.ok(model.risks.some(r=>r.type==='book'),'wizard should offer risk diagnosis');
 
-const context=makePlanningContext(books.flatMap(b=>b.index.pages),{id:'mobility-fall'});
+const context=makePlanningContext(enrichedBooks.flatMap(b=>b.index.pages),{id:'mobility-fall'});
 context.problemDiag={kind:'NANDA',page:399,code:'00365',title:'Beeinträchtigte Gehfähigkeit',risk:false};
 context.fallback=context.problemDiag;
 const plan=buildPlan(context,{
