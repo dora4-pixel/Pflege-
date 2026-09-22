@@ -268,6 +268,62 @@ export function expandQuery(query=''){
   };
 }
 
+
+function fraction(n,d,neutral=0){
+  if(!d)return neutral;
+  return Math.max(0,Math.min(1,n/d));
+}
+
+export function calculateRelevancePercent({page,terms=[],concepts=[],riskIntent=false,rawScore=0,maxRawScore=1,matchSections=[]}={}){
+  const titleMeta=normalize([
+    page?.meta?.title,page?.meta?.area,page?.meta?.domain,page?.meta?.className,page?.meta?.code
+  ].filter(Boolean).join(' '));
+  const full=normalize([
+    titleMeta,page?.text||''
+  ].join(' '));
+
+  const useful=[...new Set((terms||[]).map(normalize).filter(x=>x.length>=3))];
+  const matchedTerms=useful.filter(t=>full.includes(t)).length;
+  const titleTerms=useful.filter(t=>titleMeta.includes(t)).length;
+  const termCoverage=fraction(matchedTerms,useful.length,0.35);
+  const titleCoverage=fraction(titleTerms,Math.min(useful.length,6),0);
+
+  let semanticCoverage=concepts?.length?0:0.55;
+  if(concepts?.length){
+    const matchedConcepts=concepts.filter(c=>(c.terms||[]).some(t=>full.includes(normalize(t)))).length;
+    semanticCoverage=fraction(matchedConcepts,concepts.length,0);
+  }
+
+  const isRiskTitle=/\bRisiko\b/i.test(page?.meta?.title||'');
+  const hasRiskSection=(matchSections||[]).some(x=>/Risikofaktoren|Risiko/i.test(x))||/\bRisikofaktoren\b/i.test(page?.text||'');
+  const riskAlignment=riskIntent?(isRiskTitle?1:hasRiskSection?0.62:0.12):0.72;
+
+  let sectionEvidence=0.35;
+  const sections=matchSections||[];
+  if(sections.some(x=>/Titel|Klassifikation/i.test(x)))sectionEvidence=1;
+  else if(sections.some(x=>/Bestimmende|Kennzeichen|Symptome|Beeinflussende|Ursachen|Risikofaktoren|Definition/i.test(x)))sectionEvidence=0.92;
+  else if(sections.some(x=>/Pflegeziele|Pflegemaßnahmen/i.test(x)))sectionEvidence=0.62;
+  else if(sections.some(x=>/Seitentext/i.test(x)))sectionEvidence=0.45;
+
+  const rawRelative=fraction(Number(rawScore)||0,Math.max(Number(maxRawScore)||1,0.0001),0);
+
+  const quality=riskIntent
+    ? rawRelative*0.26+termCoverage*0.24+titleCoverage*0.14+semanticCoverage*0.10+sectionEvidence*0.10+riskAlignment*0.16
+    : rawRelative*0.30+termCoverage*0.28+titleCoverage*0.16+semanticCoverage*0.10+sectionEvidence*0.10+riskAlignment*0.06;
+
+  let pct=Math.round(8+91*Math.max(0,Math.min(1,quality)));
+  if(riskIntent&&!isRiskTitle&&!hasRiskSection)pct=Math.min(pct,72);
+  return Math.max(1,Math.min(99,pct));
+}
+
+export function relevanceLabel(pct=0){
+  if(pct>=90)return 'Очень высокое соответствие';
+  if(pct>=80)return 'Высокое соответствие';
+  if(pct>=65)return 'Хорошее соответствие';
+  if(pct>=50)return 'Возможный вариант';
+  return 'Дополнительный вариант';
+}
+
 export function createSearchEngine(books=[]){
   const Ctor=MiniSearchCtor();
   if(!Ctor)throw new Error('MiniSearch не загрузился');
@@ -337,7 +393,7 @@ export function createSearchEngine(books=[]){
         if(!g.meta?.domain&&p.meta?.domain)g.meta=p.meta;
       }
 
-      const result=[...groups.values()].map(g=>{
+      const grouped=[...groups.values()].map(g=>{
         g.pages.sort((a,b)=>b.searchScore-a.searchScore);
         const best=g.pages[0];
         return {
@@ -347,7 +403,19 @@ export function createSearchEngine(books=[]){
           matchSections:[...g.matchSections],
           searchScore:g.searchScore
         };
-      }).sort((a,b)=>b.searchScore-a.searchScore).slice(0,limit);
+      });
+
+      const maxRaw=Math.max(1,...grouped.map(x=>Number(x.searchScore)||0));
+      const result=grouped.map(x=>{
+        const relevancePct=calculateRelevancePercent({
+          page:x,terms,concepts,riskIntent,rawScore:x.searchScore,maxRawScore:maxRaw,matchSections:x.matchSections
+        });
+        return {
+          ...x,
+          relevancePct,
+          relevanceLabel:relevanceLabel(relevancePct)
+        };
+      }).sort((a,b)=>b.relevancePct-a.relevancePct||b.searchScore-a.searchScore).slice(0,limit);
 
       return {hits:result,direction,terms,riskIntent,concepts};
     }
