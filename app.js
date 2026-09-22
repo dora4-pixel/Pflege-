@@ -1,5 +1,5 @@
 import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs';
-import { createSearchEngine, nandaMeta, enpMeta } from './searchEngine.js';
+import { createSearchEngine, nandaMeta, enpMeta, enrichBookIndex } from './searchEngine.js';
 import { makePlanningContext, buildPlan, planToText, renderSuggestions } from './planEngine.js';
 import { buildKnowledgeBase, buildWizardModel, optionsForDiagnosis, frameworkInfo } from './knowledgeBase.js';
 import { listPatients, getPatient, savePatient, deletePatient, getActivePatientId, setActivePatientId } from './patientStore.js';
@@ -45,8 +45,7 @@ async function saveBook(b){try{const db=await openDb();await new Promise((ok,bad
 async function removeBook(kind){try{const db=await openDb();await new Promise((ok,bad)=>{const tx=db.transaction('books','readwrite');tx.objectStore('books').delete(kind);tx.oncomplete=ok;tx.onerror=()=>bad(tx.error)});db.close()}catch{};const i=books.findIndex(b=>b.kind===kind);if(i>=0)books.splice(i,1);refreshEngine();renderBooks()}
 
 function remapBookMeta(book){
-  for(const p of book.index?.pages||[]) p.meta=p.kind==='NANDA'?nandaMeta(p.text||''):enpMeta(p.text||'');
-  return book;
+  return enrichBookIndex(book);
 }
 
 async function loadBooks(){
@@ -218,7 +217,7 @@ async function upload(kind,file){
       pages.push({kind,page:n,text,meta});
       if(n===1||n%10===0||n===pdf.numPages){showProgress(kind,`Извлекаю ${n} из ${pdf.numPages}`,Math.round(n/pdf.numPages*92));await new Promise(r=>setTimeout(r,0))}
     }
-    const b={kind,name:file.name,blob:file,index:{kind,name:file.name,pages}};
+    const b=enrichBookIndex({kind,name:file.name,blob:file,index:{kind,name:file.name,pages}});
     const old=books.findIndex(x=>x.kind===kind);if(old>=0)books[old]=b;else books.push(b);
     showProgress(kind,'Строю быстрый индекс…',96);
     await saveBook(b);
@@ -277,15 +276,58 @@ async function search(q){
 
 $('#searchForm').onsubmit=e=>{e.preventDefault();const q=$('#query').value.trim();if(!q)return;$('#query').value='';search(q)};
 
+function resultMetaRows(h){
+  const rows=[];
+  const topic=h.meta?.topic||h.meta?.area||lastDirection?.title||'';
+  if(topic)rows.push([ui('Тема / Pflegebereich','Thema / Pflegebereich'),topic]);
+  if(h.kind==='NANDA'){
+    rows.push([ui('Домена','Domäne'),h.meta?.domain||'—']);
+    rows.push([ui('Класс','Klasse'),h.meta?.className||'—']);
+    rows.push([ui('Diagnosencode','Diagnosencode'),h.meta?.code||'—']);
+  }else{
+    rows.push([ui('Система','System'),'ENP']);
+    rows.push([ui('Область','Bereich'),h.meta?.area||'—']);
+  }
+  rows.push([ui('Pflegediagnose','Pflegediagnose'),h.meta?.title||'—']);
+  if(h.matchSections?.length)rows.push([ui('Найдено в разделе','Treffer in'),h.matchSections.join(' · ')]);
+  const bestBook=h.bookPage?String(h.bookPage):'';
+  rows.push([ui('Страница книги','Buchseite'),bestBook||String(h.page)]);
+  if(bestBook&&String(bestBook)!==String(h.page))rows.push([ui('PDF-страница','PDF-Seite'),String(h.page)]);
+  return rows;
+}
+
 function renderResults(){
   const r=$('#results');
   r.innerHTML=hits.map((h,i)=>{
     const planButton=appMode==='patient'
       ? `<button class="planBtn" data-plan="${i}">${ui('Pflegeplan по вариантам','Pflegeplan auswählen')}</button>`
       : '';
-    return `<article class="result"><div class="resultHead"><div class="rank">${i+1}</div><div><div class="tags"><span class="tag ${h.kind.toLowerCase()}">${h.kind}</span><span class="tag">${ui('стр.','S.')} ${h.page}</span>${h.meta?.code?`<span class="tag">${esc(h.meta.code)}</span>`:''}</div><h3>${esc(h.meta?.title||ui('Информационная страница','Informationsseite'))}</h3><div class="meta">${esc([h.meta?.domain,h.meta?.className].filter(Boolean).join(' · '))}</div></div></div><div class="resultBtns"><button class="openBtn" data-open="${i}">${ui('Открыть страницу','Seite öffnen')}</button>${planButton}</div></article>`;
+    const rows=resultMetaRows(h).map(([k,v])=>`<div class="resultMetaRow"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
+    const related=(h.relatedPages||[]).slice(0,5);
+    const relatedHtml=related.length>1
+      ? `<div class="relatedPages"><span>${ui('Релевантные страницы','Relevante Seiten')}:</span> ${related.map(p=>`<button data-related-open="${i}:${p.page}">${p.bookPage||p.page}</button>`).join(' ')}</div>`
+      : '';
+    return `<article class="result detailedResult">
+      <div class="resultHead">
+        <div class="rank">${i+1}</div>
+        <div class="resultBody">
+          <div class="tags"><span class="tag ${h.kind.toLowerCase()}">${h.kind}</span><span class="tag">${ui('книга стр.','Buch S.')} ${esc(h.bookPage||h.page)}</span>${h.meta?.code?`<span class="tag">${esc(h.meta.code)}</span>`:''}</div>
+          <h3>${esc(h.meta?.title||ui('Информационная страница','Informationsseite'))}</h3>
+          <div class="resultMetaGrid">${rows}</div>
+          ${relatedHtml}
+        </div>
+      </div>
+      <div class="resultBtns"><button class="openBtn" data-open="${i}">${ui('Открыть лучшую страницу','Beste Seite öffnen')}</button>${planButton}</div>
+    </article>`;
   }).join('');
   r.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openPage(hits[+b.dataset.open]));
+  r.querySelectorAll('[data-related-open]').forEach(b=>b.onclick=()=>{
+    const [hitIndex,pageNo]=b.dataset.relatedOpen.split(':').map(Number);
+    const base=hits[hitIndex];
+    const book=byKind(base.kind);
+    const page=book?.index?.pages?.find(p=>Number(p.page)===pageNo);
+    if(page)openPage({...page,matchSections:base.matchSections,relatedPages:base.relatedPages});
+  });
   r.querySelectorAll('[data-plan]').forEach(b=>b.onclick=()=>{const h=hits[+b.dataset.plan];openWizard([h,...hits.filter(x=>x!==h)],lastDirection,h)});
 }
 
