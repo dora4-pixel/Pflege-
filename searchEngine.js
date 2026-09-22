@@ -278,42 +278,69 @@ export function calculateRelevancePercent({page,terms=[],concepts=[],riskIntent=
   const titleMeta=normalize([
     page?.meta?.title,page?.meta?.area,page?.meta?.domain,page?.meta?.className,page?.meta?.code
   ].filter(Boolean).join(' '));
-  const full=normalize([
-    titleMeta,page?.text||''
-  ].join(' '));
+  const full=normalize([titleMeta,page?.text||''].join(' '));
 
   const useful=[...new Set((terms||[]).map(normalize).filter(x=>x.length>=3))];
-  const matchedTerms=useful.filter(t=>full.includes(t)).length;
-  const titleTerms=useful.filter(t=>titleMeta.includes(t)).length;
-  const termCoverage=fraction(matchedTerms,useful.length,0.35);
-  const titleCoverage=fraction(titleTerms,Math.min(useful.length,6),0);
+  const titleMatches=useful.filter(t=>titleMeta.includes(t)).length;
+  const fullMatches=useful.filter(t=>full.includes(t)).length;
 
-  let semanticCoverage=concepts?.length?0:0.55;
+  // Expanded search contains many synonyms. A correct diagnosis must not be punished
+  // because it does not literally contain every synonym.
+  const titleEvidence=Math.min(1,titleMatches/Math.max(1,Math.min(useful.length,2)));
+  const queryEvidence=Math.min(1,fullMatches/Math.max(1,Math.min(useful.length,4)));
+
+  let semanticEvidence=concepts?.length?0:0.55;
+  let conceptInTitle=false;
   if(concepts?.length){
-    const matchedConcepts=concepts.filter(c=>(c.terms||[]).some(t=>full.includes(normalize(t)))).length;
-    semanticCoverage=fraction(matchedConcepts,concepts.length,0);
+    const scores=concepts.map(c=>{
+      const cterms=[...new Set((c.terms||[]).map(normalize).filter(Boolean))];
+      const th=cterms.filter(t=>titleMeta.includes(t)).length;
+      const fh=cterms.filter(t=>full.includes(t)).length;
+      if(th>0)conceptInTitle=true;
+      if(th>=2)return 1;
+      if(th===1)return 0.94;
+      if(fh>=3)return 0.86;
+      if(fh===2)return 0.78;
+      if(fh===1)return 0.66;
+      return 0;
+    });
+    semanticEvidence=scores.reduce((a,b)=>a+b,0)/scores.length;
   }
 
-  const isRiskTitle=/\bRisiko\b/i.test(page?.meta?.title||'');
+  const title=page?.meta?.title||'';
+  const isRiskTitle=/\bRisiko\b/i.test(title);
   const hasRiskSection=(matchSections||[]).some(x=>/Risikofaktoren|Risiko/i.test(x))||/\bRisikofaktoren\b/i.test(page?.text||'');
-  const riskAlignment=riskIntent?(isRiskTitle?1:hasRiskSection?0.62:0.12):0.72;
+  const riskAlignment=riskIntent?(isRiskTitle?1:hasRiskSection?0.68:0.10):0.74;
 
-  let sectionEvidence=0.35;
+  let sectionEvidence=0.38;
   const sections=matchSections||[];
   if(sections.some(x=>/Titel|Klassifikation/i.test(x)))sectionEvidence=1;
-  else if(sections.some(x=>/Bestimmende|Kennzeichen|Symptome|Beeinflussende|Ursachen|Risikofaktoren|Definition/i.test(x)))sectionEvidence=0.92;
-  else if(sections.some(x=>/Pflegeziele|Pflegemaßnahmen/i.test(x)))sectionEvidence=0.62;
-  else if(sections.some(x=>/Seitentext/i.test(x)))sectionEvidence=0.45;
+  else if(sections.some(x=>/Bestimmende|Kennzeichen|Symptome|Beeinflussende|Ursachen|Risikofaktoren|Definition/i.test(x)))sectionEvidence=0.93;
+  else if(sections.some(x=>/Pflegeziele|Pflegemaßnahmen/i.test(x)))sectionEvidence=0.66;
+  else if(sections.some(x=>/Seitentext/i.test(x)))sectionEvidence=0.48;
 
   const rawRelative=fraction(Number(rawScore)||0,Math.max(Number(maxRawScore)||1,0.0001),0);
 
   const quality=riskIntent
-    ? rawRelative*0.26+termCoverage*0.24+titleCoverage*0.14+semanticCoverage*0.10+sectionEvidence*0.10+riskAlignment*0.16
-    : rawRelative*0.30+termCoverage*0.28+titleCoverage*0.16+semanticCoverage*0.10+sectionEvidence*0.10+riskAlignment*0.06;
+    ? semanticEvidence*0.30+titleEvidence*0.20+riskAlignment*0.20+sectionEvidence*0.12+queryEvidence*0.10+rawRelative*0.08
+    : semanticEvidence*0.31+titleEvidence*0.23+sectionEvidence*0.15+queryEvidence*0.15+rawRelative*0.11+riskAlignment*0.05;
 
-  let pct=Math.round(8+91*Math.max(0,Math.min(1,quality)));
-  if(riskIntent&&!isRiskTitle&&!hasRiskSection)pct=Math.min(pct,72);
-  return Math.max(1,Math.min(99,pct));
+  let pct=Math.round(5+95*Math.max(0,Math.min(1,quality)));
+
+  // Canonical-title floors: this is search relevance, not clinical probability.
+  if(riskIntent&&isRiskTitle&&conceptInTitle)pct=Math.max(pct,96);
+  if(!riskIntent&&conceptInTitle)pct=Math.max(pct,92);
+
+  // NANDA is the canonical diagnosis/classification source. When query intent and
+  // canonical NANDA title align, the classification match can legitimately be 100%.
+  const nandaComplete=page?.kind==='NANDA'&&page?.meta?.code&&page?.meta?.domain&&page?.meta?.className;
+  if(nandaComplete&&conceptInTitle&&((riskIntent&&isRiskTitle)||(!riskIntent&&!isRiskTitle)))pct=100;
+
+  // ENP can be an equally strong practical match, but remains a separate source role.
+  if(page?.kind==='ENP'&&conceptInTitle&&((riskIntent&&isRiskTitle)||(!riskIntent&&!isRiskTitle)))pct=Math.max(pct,98);
+
+  if(riskIntent&&!isRiskTitle&&!hasRiskSection)pct=Math.min(pct,70);
+  return Math.max(1,Math.min(100,pct));
 }
 
 export function relevanceLabel(pct=0){
@@ -405,19 +432,51 @@ export function createSearchEngine(books=[]){
         };
       });
 
-      const maxRaw=Math.max(1,...grouped.map(x=>Number(x.searchScore)||0));
-      const result=grouped.map(x=>{
+      const sourceMax=new Map();
+      for(const x of grouped){
+        sourceMax.set(x.kind,Math.max(sourceMax.get(x.kind)||1,Number(x.searchScore)||0));
+      }
+
+      const scored=grouped.map(x=>{
         const relevancePct=calculateRelevancePercent({
-          page:x,terms,concepts,riskIntent,rawScore:x.searchScore,maxRawScore:maxRaw,matchSections:x.matchSections
+          page:x,terms,concepts,riskIntent,rawScore:x.searchScore,
+          maxRawScore:sourceMax.get(x.kind)||1,matchSections:x.matchSections
         });
         return {
           ...x,
           relevancePct,
           relevanceLabel:relevanceLabel(relevancePct)
         };
-      }).sort((a,b)=>b.relevancePct-a.relevancePct||b.searchScore-a.searchScore).slice(0,limit);
+      });
 
-      return {hits:result,direction,terms,riskIntent,concepts};
+      const bySource={
+        NANDA:scored.filter(x=>x.kind==='NANDA').sort((a,b)=>b.relevancePct-a.relevancePct||b.searchScore-a.searchScore),
+        ENP:scored.filter(x=>x.kind==='ENP').sort((a,b)=>b.relevancePct-a.relevancePct||b.searchScore-a.searchScore)
+      };
+      for(const kind of ['NANDA','ENP']){
+        bySource[kind]=bySource[kind].map((x,i)=>({...x,sourceRank:i+1,sourceBest:i===0}));
+      }
+
+      // Always surface the best result from each loaded source first. This prevents
+      // ENP text density from pushing the canonical NANDA diagnosis far down (or vice versa).
+      const balanced=[];
+      if(bySource.NANDA[0])balanced.push(bySource.NANDA[0]);
+      if(bySource.ENP[0])balanced.push(bySource.ENP[0]);
+      const used=new Set(balanced.map(x=>x.key));
+      const remaining=[...bySource.NANDA.slice(1),...bySource.ENP.slice(1)]
+        .sort((a,b)=>b.relevancePct-a.relevancePct||b.searchScore-a.searchScore);
+      for(const x of remaining){
+        if(used.has(x.key))continue;
+        balanced.push(x);used.add(x.key);
+        if(balanced.length>=limit)break;
+      }
+
+      const primary={
+        NANDA:bySource.NANDA[0]||null,
+        ENP:bySource.ENP[0]||null
+      };
+
+      return {hits:balanced.slice(0,limit),bySource,primary,direction,terms,riskIntent,concepts};
     }
   };
 }
