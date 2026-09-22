@@ -352,7 +352,13 @@ async function translateInto(text,box,meta={}){
 
 async function openPage(h){
   reopenModal=()=>openPage(h);
-  modal(`<h2>${esc(h.meta?.title||h.kind+' Seite '+h.page)}</h2><p class="note">${h.kind}, Seite ${h.page}${h.meta?.code?' · '+esc(h.meta.code):''}</p><div class="split"><div class="pane"><h3>${ui('Оригинальная страница','Originalseite')}</h3>${byKind(h.kind)?.blob?'<div class="pdfBox"><canvas id="pdfCanvas"></canvas></div>':`<div class="pageText">${esc(h.text)}</div>`}</div><div class="pane"><h3>${ui('Русский перевод','Russische Übersetzung')}</h3><div id="translation" class="translation">${ui('Нажми «Перевести».','„Übersetzen“ tippen.')}</div><div class="actions"><button id="translateBtn">${ui('Перевести страницу','Seite übersetzen')}</button></div></div></div>`);
+  const rows=resultMetaRows(h).map(([k,v])=>`<div class="pageMetaRow"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
+  modal(`<h2>${esc(h.meta?.title||h.kind+' Seite '+h.page)}</h2>
+    <div class="pageMetaCard">${rows}</div>
+    <div class="split">
+      <div class="pane"><h3>${ui('Оригинальная страница','Originalseite')}</h3>${byKind(h.kind)?.blob?'<div class="pdfBox"><canvas id="pdfCanvas"></canvas></div>':`<div class="pageText">${esc(h.text)}</div>`}</div>
+      <div class="pane"><h3>${ui('Русский перевод','Russische Übersetzung')}</h3><div id="translation" class="translation">${ui('Нажми «Перевести».','„Übersetzen“ tippen.')}</div><div class="actions"><button id="translateBtn">${ui('Перевести страницу','Seite übersetzen')}</button></div></div>
+    </div>`);
   if(byKind(h.kind)?.blob)renderPdf(byKind(h.kind),h.page,$('#pdfCanvas')).catch(()=>{$('#pdfCanvas').replaceWith(document.createTextNode(h.text))});
   $('#translateBtn').onclick=()=>translateInto(h.text,$('#translation'),{source:h.kind,page:h.page,title:h.meta?.title||''});
 }
