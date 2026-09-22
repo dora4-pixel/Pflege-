@@ -299,7 +299,7 @@ async function search(q){
     ].filter(Boolean).join('\n'));
   }else if(appMode==='books'){
     message('bot',[
-      getLang()==='de'?`Gefunden: ${hits.length} passende Pflegediagnosen in ${ms} ms. Die Karten zeigen Klassifikation, Trefferbereich und Buchseite.`:`Нашёл ${hits.length} подходящих Pflegediagnosen за ${ms} мс. Карточки показывают классификацию, раздел совпадения и страницу книги.`,
+      getLang()==='de'?`Gefunden: ${hits.length} passende Pflegediagnosen in ${ms} ms. Die Prozentzahl zeigt die Suchrelevanz, nicht die medizinische Wahrscheinlichkeit.`:`Нашёл ${hits.length} подходящих Pflegediagnosen за ${ms} мс. Процент показывает релевантность запросу, а не медицинскую вероятность.`,
       inferred,fallback
     ].filter(Boolean).join('\n'));
   }else{
@@ -347,8 +347,9 @@ function renderResults(){
       <div class="resultHead">
         <div class="rank">${i+1}</div>
         <div class="resultBody">
-          <div class="tags"><span class="tag ${h.kind.toLowerCase()}">${h.kind}</span><span class="tag">${ui('книга стр.','Buch S.')} ${esc(h.bookPage||h.page)}</span>${h.meta?.code?`<span class="tag">${esc(h.meta.code)}</span>`:''}</div>
+          <div class="tags"><span class="tag ${h.kind.toLowerCase()}">${h.kind}</span><span class="tag">${ui('книга стр.','Buch S.')} ${esc(h.bookPage||h.page)}</span>${h.meta?.code?`<span class="tag">${esc(h.meta.code)}</span>`:''}${Number.isFinite(h.relevancePct)?`<span class="tag relevanceTag">${i===0?ui('Лучшее · ','Beste · '):''}${h.relevancePct}%</span>`:''}</div>
           <h3>${esc(h.meta?.title||ui('Информационная страница','Informationsseite'))}</h3>
+          ${Number.isFinite(h.relevancePct)?`<div class="relevanceBlock"><div class="relevanceTop"><span>${ui('Соответствие запросу','Relevanz zur Anfrage')}</span><b>${h.relevancePct}% · ${esc(h.relevanceLabel||'')}</b></div><div class="relevanceTrack"><i style="width:${h.relevancePct}%"></i></div></div>`:''}
           <div class="resultMetaGrid">${rows}</div>
           ${relatedHtml}
         </div>
