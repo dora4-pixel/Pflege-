@@ -83,6 +83,23 @@ function guessArea(text=''){
   return best;
 }
 
+function enpFallbackTitle(text=''){
+  const lines=String(text).split(/\n+/).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
+  const heading=/^(Definition|Kennzeichen|Symptome|Ursachen|Ressourcen|Pflegeziele|Pflegemaßnahmen|Pflegeinterventionen|LOE\s+PD|LOE\s+PL)\b/i;
+  const stop=lines.findIndex(x=>heading.test(x));
+  const end=stop>=0?stop:Math.min(lines.length,14);
+  const candidates=lines.slice(0,end).filter(x=>
+    x.length>=4&&x.length<=190&&
+    !/^\d{1,4}$/.test(x)&&
+    !/^(ENP|Praxisleitlinien|Pflegediagnosen|Inhaltsverzeichnis|Seite\b)/i.test(x)&&
+    !/^(Bereich|Kapitel|LOE)\b/i.test(x)
+  );
+  if(!candidates.length)return '';
+  const risk=candidates.find(x=>/\bRisiko\b/i.test(x));
+  if(risk)return cleanupTitle(risk);
+  return cleanupTitle(candidates[candidates.length-1]);
+}
+
 export function enpMeta(text=''){
   const c=String(text).replace(/\s+/g,' ').trim();
   const candidates=[
@@ -99,6 +116,7 @@ export function enpMeta(text=''){
     const m=re.exec(c);
     if(m&&m.index<pos){pos=m.index;title=m[1]||m[0]}
   }
+  if(!title)title=enpFallbackTitle(text);
   return {domain:'',className:'',code:'',title:cleanupTitle(title),area:guessArea(c)};
 }
 
