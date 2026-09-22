@@ -158,10 +158,10 @@ export function planToText(plan){
     ...(plan.risk?[]:[`Kennzeichen/Symptome: ${plan.symptoms}`]),
     `Ressourcen: ${plan.resources}`,
     '',
-    'SMART:',
+    'SMART-Zielprüfung:',
     `S – Spezifisch: ${plan.smart.S}`,
     `M – Messbar: ${plan.smart.M}`,
-    `A – Akzeptiert: ${plan.smart.A}`,
+    `A – Akzeptiert/Attraktiv: ${plan.smart.A}`,
     `R – Realistisch: ${plan.smart.R}`,
     `T – Terminiert: ${plan.smart.T}`,
     '',
@@ -171,7 +171,7 @@ export function planToText(plan){
   ];
   if(plan.measures.length) plan.measures.forEach((m,i)=>lines.push(`${i+1}. ${m}`));
   else lines.push('[passende Maßnahmen aus den Quellen auswählen und patientenspezifisch konkretisieren]');
-  lines.push('',`Evaluation: am/innerhalb von ${plan.period||'[Zeitraum ergänzen]'} anhand des Messkriteriums prüfen.`);
+  lines.push('',`Evaluation: ${timePhrase(plan.period)} anhand des vereinbarten Messkriteriums prüfen und dokumentieren.`);
   if(plan.sources.length)lines.push(`Quellen: ${plan.sources.join(' · ')}`);
   return lines.join('\n');
 }
