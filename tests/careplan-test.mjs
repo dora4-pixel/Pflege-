@@ -28,6 +28,20 @@ assert.ok(skinSemantic.concepts.some(x=>x.id==='skin-integrity'),'skin concept s
 assert.ok(skinSemantic.terms.includes('hautintegrität'),'German skin-integrity term should be expanded');
 const rel=calculateRelevancePercent({page:{meta:{title:'Risiko einer beeinträchtigten Hautintegrität',area:'Haut / Wunde'},text:'Risikofaktoren Hautreizung Rötung'},terms:['hautintegrität','hautreizung','risiko'],concepts:skinSemantic.concepts,riskIntent:true,rawScore:10,maxRawScore:10,matchSections:['Risikofaktoren']});
 assert.ok(rel>=80,'relevance score should be high for aligned skin risk');
+const exactNandaRel=calculateRelevancePercent({
+  page:{
+    kind:'NANDA',
+    meta:{title:'Risiko einer beeinträchtigten Hautintegrität',area:'Haut / Wunde',domain:'11 Sicherheit/Schutz',className:'2 Physische Verletzung',code:'00999'},
+    text:'Definition Hautintegrität. Risikofaktoren Hautreizung Rötung'
+  },
+  terms:['hautintegrität','hautreizung','risiko'],
+  concepts:skinSemantic.concepts,
+  riskIntent:true,
+  rawScore:10,
+  maxRawScore:10,
+  matchSections:['Titel / Klassifikation','Risikofaktoren']
+});
+assert.equal(exactNandaRel,100,'canonical aligned NANDA match should reach 100% search relevance');
 assert.ok(/hoch|соответствие/i.test(relevanceLabel(rel)),'relevance label should describe high match');
 const model=buildWizardModel(kb,enrichedBooks.flatMap(b=>b.index.pages),{id:'mobility-fall',title:'Mobilität / Sturzrisiko',terms:['gehen','sturz','mobilität']},'боится встать и плохо ходит');
 assert.ok(model.diagnoses.length>0,'wizard should offer diagnoses');
@@ -36,6 +50,11 @@ assert.ok(model.measures.length>0,'wizard should offer measures');
 assert.ok(model.risks.some(r=>r.type==='book'),'wizard should offer risk diagnosis');
 
 const context=makePlanningContext(enrichedBooks.flatMap(b=>b.index.pages),{id:'mobility-fall'});
+assert.equal(context.sourceCompleteness.complete,true,'planning context should contain both NANDA and ENP');
+assert.ok(context.primaryNanda,'primary NANDA source missing');
+assert.ok(context.primaryEnp,'primary ENP source missing');
+assert.ok(context.sources.some(x=>x.startsWith('NANDA')),'NANDA source missing from plan context');
+assert.ok(context.sources.some(x=>x.startsWith('ENP')),'ENP source missing from plan context');
 context.problemDiag={kind:'NANDA',page:399,code:'00365',title:'Beeinträchtigte Gehfähigkeit',risk:false};
 context.fallback=context.problemDiag;
 const plan=buildPlan(context,{
