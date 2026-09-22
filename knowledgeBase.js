@@ -209,38 +209,65 @@ export function buildWizardModel(kb,hits=[],direction=null,query=''){
   const expanded=expandQuery(query||'');
   const terms=expanded.terms;
   const hitKeys=new Set(hits.map(function(h){return h.kind+':'+h.page}));
-  const ranked=kb.entries
+
+  const scored=kb.entries
     .map(function(e){return {e:e,score:scoreEntry(e,[...terms,...(direction?.terms||[])],hitKeys)}})
-    .filter(function(x){return x.score>0})
-    .sort(function(a,b){return b.score-a.score})
-    .slice(0,14)
-    .map(function(x){return x.e});
+    .filter(function(x){return x.score>0});
+
+  const nandaRanked=scored.filter(x=>x.e.kind==='NANDA').sort((a,b)=>b.score-a.score).map(x=>x.e);
+  const enpRanked=scored.filter(x=>x.e.kind==='ENP').sort((a,b)=>b.score-a.score).map(x=>x.e);
 
   const directTitles=new Set(hits.map(function(h){return normalize(h.meta?.title||'')}).filter(Boolean));
   for(const e of kb.entries){
-    if(directTitles.has(normalize(e.title))&&!ranked.includes(e))ranked.unshift(e);
+    if(!directTitles.has(normalize(e.title)))continue;
+    const target=e.kind==='NANDA'?nandaRanked:enpRanked;
+    if(!target.includes(e))target.unshift(e);
   }
 
-  const diagnoses=ranked.slice(0,10).map(function(e){return {
+  // Keep both books represented. NANDA supplies formal diagnosis/classification,
+  // ENP supplies practical planning content. One source must never bury the other.
+  const ranked=[];
+  const pushUnique=e=>{if(e&&!ranked.includes(e))ranked.push(e)};
+  pushUnique(nandaRanked[0]);pushUnique(enpRanked[0]);
+  for(let i=1;i<Math.max(nandaRanked.length,enpRanked.length)&&ranked.length<16;i++){
+    pushUnique(nandaRanked[i]);pushUnique(enpRanked[i]);
+  }
+
+  const diagnoses=ranked.slice(0,12).map(function(e){return {
     key:e.key,kind:e.kind,title:e.title,code:e.code,risk:e.risk,pages:e.pages,bookPages:e.bookPages,
     domain:e.domain,className:e.className,area:e.area,
+    sourceRole:e.kind==='NANDA'?'Diagnose/Klassifikation':'Ziele/Maßnahmen/Ressourcen',
     source:e.kind+' '+(e.bookPages?.length?'Buch S. '+e.bookPages.join(', '):'PDF S. '+e.pages.join(', '))
   }});
 
-  const riskEntries=ranked.filter(function(e){return e.risk}).slice(0,8).map(function(e){return {
-    id:e.key,type:'book',title:e.title,source:e.kind+' '+(e.bookPages?.length?'Buch S. '+e.bookPages.join(', '):'PDF S. '+e.pages.join(', ')),
+  const riskNanda=nandaRanked.filter(e=>e.risk).slice(0,4);
+  const riskEnp=enpRanked.filter(e=>e.risk).slice(0,4);
+  const riskRanked=[];
+  for(let i=0;i<Math.max(riskNanda.length,riskEnp.length);i++){
+    if(riskNanda[i])riskRanked.push(riskNanda[i]);
+    if(riskEnp[i])riskRanked.push(riskEnp[i]);
+  }
+  const riskEntries=riskRanked.map(function(e){return {
+    id:e.key,type:'book',title:e.title,kind:e.kind,
+    source:e.kind+' '+(e.bookPages?.length?'Buch S. '+e.bookPages.join(', '):'PDF S. '+e.pages.join(', ')),
     diagnosisKey:e.key,riskFactors:e.riskFactors,measures:e.measures,goals:e.goals
   }});
+
+  const formal=[...nandaRanked,...enpRanked];
+  const practical=[...enpRanked,...nandaRanked];
 
   return {
     diagnoses:diagnoses,
     relevantEntries:ranked,
-    causes:options(ranked,'causes',26),
-    riskFactors:options(ranked,'riskFactors',26),
-    symptoms:options(ranked,'symptoms',26),
-    resources:options(ranked,'resources',20),
-    goals:options(ranked,'goals',18),
-    measures:options(ranked,'measures',30),
+    primaryNanda:nandaRanked[0]||null,
+    primaryEnp:enpRanked[0]||null,
+    sourceCompleteness:{nanda:Boolean(nandaRanked[0]),enp:Boolean(enpRanked[0]),complete:Boolean(nandaRanked[0]&&enpRanked[0])},
+    causes:options(formal,'causes',26),
+    riskFactors:options(formal,'riskFactors',26),
+    symptoms:options(formal,'symptoms',26),
+    resources:options(practical,'resources',20),
+    goals:options(practical,'goals',18),
+    measures:options(practical,'measures',30),
     risks:[...riskEntries,...relevantDnqp(query,direction,ranked)],
     smartTemplates:SMART_TEMPLATES[direction?.id]||SMART_TEMPLATES.generic
   };
