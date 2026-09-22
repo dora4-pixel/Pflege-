@@ -108,13 +108,27 @@ function mergeUnique(target,items){
 }
 
 function ensureEntry(map,page,title,code=''){
-  const key=page.kind+':'+normalize(title||code||'unbekannt');
+  const key=page.diagnosisKey||page.kind+':'+normalize(code||title||'unbekannt');
   if(!map.has(key))map.set(key,{
-    key:key,kind:page.kind,title:title||'Pflegediagnose',code:code||'',pages:new Set(),
+    key:key,
+    kind:page.kind,
+    title:title||'Pflegediagnose',
+    code:code||'',
+    domain:page.meta?.domain||'',
+    className:page.meta?.className||'',
+    area:page.meta?.area||'',
+    pages:new Set(),
+    bookPages:new Set(),
     risk:/\bRisiko\b/i.test(title||''),
     causes:[],riskFactors:[],symptoms:[],resources:[],goals:[],measures:[],definition:[]
   });
-  const e=map.get(key);e.pages.add(page.page);return e;
+  const e=map.get(key);
+  if(!e.domain&&page.meta?.domain)e.domain=page.meta.domain;
+  if(!e.className&&page.meta?.className)e.className=page.meta.className;
+  if(!e.area&&page.meta?.area)e.area=page.meta.area;
+  e.pages.add(page.page);
+  if(page.bookPage)e.bookPages.add(page.bookPage);
+  return e;
 }
 
 function addSection(entry,page,label,items){
@@ -137,21 +151,22 @@ function parseInto(entry,page){
 export function buildKnowledgeBase(books=[]){
   const map=new Map();
   for(const book of books){
-    let current=null;
     for(const page of book.index?.pages||[]){
       if(isNavigationPage(page.text||''))continue;
       const title=clean(page.meta?.title||'');
       const code=page.meta?.code||'';
-      if(title){
-        current=ensureEntry(map,page,title,code);
-      }else if(!current){
-        continue;
-      }
-      current.pages.add(page.page);
-      parseInto(current,page);
+      if(!title||!page.diagnosisKey)continue;
+      const entry=ensureEntry(map,page,title,code);
+      parseInto(entry,page);
     }
   }
-  const entries=[...map.values()].map(function(e){return {...e,pages:[...e.pages].sort(function(a,b){return a-b})}});
+  const entries=[...map.values()].map(function(e){
+    return {
+      ...e,
+      pages:[...e.pages].sort(function(a,b){return a-b}),
+      bookPages:[...e.bookPages].sort(function(a,b){return Number(a)-Number(b)})
+    };
+  });
   return {entries:entries,count:entries.length};
 }
 
@@ -207,12 +222,13 @@ export function buildWizardModel(kb,hits=[],direction=null,query=''){
   }
 
   const diagnoses=ranked.slice(0,10).map(function(e){return {
-    key:e.key,kind:e.kind,title:e.title,code:e.code,risk:e.risk,pages:e.pages,
-    source:e.kind+' S. '+e.pages.join(', ')
+    key:e.key,kind:e.kind,title:e.title,code:e.code,risk:e.risk,pages:e.pages,bookPages:e.bookPages,
+    domain:e.domain,className:e.className,area:e.area,
+    source:e.kind+' '+(e.bookPages?.length?'Buch S. '+e.bookPages.join(', '):'PDF S. '+e.pages.join(', '))
   }});
 
   const riskEntries=ranked.filter(function(e){return e.risk}).slice(0,8).map(function(e){return {
-    id:e.key,type:'book',title:e.title,source:e.kind+' S. '+e.pages.join(', '),
+    id:e.key,type:'book',title:e.title,source:e.kind+' '+(e.bookPages?.length?'Buch S. '+e.bookPages.join(', '):'PDF S. '+e.pages.join(', ')),
     diagnosisKey:e.key,riskFactors:e.riskFactors,measures:e.measures,goals:e.goals
   }});
 
@@ -239,7 +255,8 @@ export function optionsForDiagnosis(kb,key){
   if(!e)return null;
   return {
     causes:e.causes,riskFactors:e.riskFactors,symptoms:e.symptoms,resources:e.resources,
-    goals:e.goals,measures:e.measures,risk:e.risk,title:e.title,code:e.code,kind:e.kind,pages:e.pages
+    goals:e.goals,measures:e.measures,risk:e.risk,title:e.title,code:e.code,kind:e.kind,pages:e.pages,bookPages:e.bookPages,
+    domain:e.domain,className:e.className,area:e.area
   };
 }
 
